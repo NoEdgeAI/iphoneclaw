@@ -53,7 +53,9 @@ class Config:
     scroll_unit: str = "pixel"  # pixel|line
     scroll_amount: int = 1000  # pixels or lines, depending on scroll_unit
     scroll_repeat: int = 10
-    scroll_focus_click: bool = True
+    # If enabled, scroll will click to focus first. This can accidentally open items under cursor,
+    # so keep it OFF by default.
+    scroll_focus_click: bool = False
     scroll_invert_y: bool = False
 
     # UX: restore mouse cursor position after each action, so the operator can keep using their Mac.

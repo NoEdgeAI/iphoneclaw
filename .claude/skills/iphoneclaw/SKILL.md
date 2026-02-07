@@ -40,6 +40,7 @@ When the worker needs to scroll on the iPhone Home Screen / App Library:
 - do NOT scroll in the middle of the screen
 - scroll/swipe slightly above the bottom navigation bar / dock area
 - DO NOT use `drag(...)` for vertical scrolling. Use `scroll(direction='up'|'down', ...)`.
+- `scroll(...)` should be wheel-only (move cursor + wheel). Avoid "click to focus" before scrolling, since it may open a video/item under the cursor.
 
 ## Pre-flight (dynamic)
 
