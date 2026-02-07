@@ -14,7 +14,6 @@ ACTION_SPACES_V1_5 = [
     "drag(start_box='<|box_start|>(x1,y1)<|box_end|>', end_box='<|box_start|>(x3,y3)<|box_end|>')",
     "iphone_home() # iPhone Home Screen (Cmd+1)",
     "iphone_app_switcher() # iPhone App Switcher (Cmd+2)",
-    "iphone_spotlight_search() # iPhone Spotlight search (Cmd+3)",
     "hotkey(key='ctrl c') # Split keys with a space and use lowercase. Also, do not use more than 3 keys in one hotkey action.",
     r"type(content='xxx') # Use escape characters \', \", and \n in content part to ensure we can parse the content in normal python string format. If you want to submit your input, use \n at the end of content.",
     "scroll(start_box='<|box_start|>(x1,y1)<|box_end|>', direction='down or up or right or left') # Show more information on the `direction` side.",

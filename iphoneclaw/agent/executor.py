@@ -85,11 +85,6 @@ def execute_action(
         out["ok"] = True
         out["dt"] = time.time() - t0
         return out
-    if action_type == "iphone_spotlight_search":
-        press("3", modifiers=["cmd"])
-        out["ok"] = True
-        out["dt"] = time.time() - t0
-        return out
 
     try:
         # macOS has one shared cursor; best-effort restore so users can keep using their Mac.
