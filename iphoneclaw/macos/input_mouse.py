@@ -179,9 +179,9 @@ def mouse_scroll(
 
     for _ in range(repeat):
         if direction in ("up", "down"):
-            # Match typical "deltaY > 0 => scroll down" semantics (web / UI-TARS operators).
+            # Quartz scroll wheel: conventionally, positive dy scrolls up and negative dy scrolls down.
             # Some macOS setups may feel inverted; allow an explicit invert.
-            dy = (-per if direction == "up" else per)
+            dy = (per if direction == "up" else -per)
             if invert_y:
                 dy = -dy
             scroll_evt = Quartz.CGEventCreateScrollWheelEvent(
