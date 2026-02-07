@@ -39,6 +39,7 @@ Prefer opening apps via:
 When the worker needs to scroll on the iPhone Home Screen / App Library:
 - do NOT scroll in the middle of the screen
 - scroll/swipe slightly above the bottom navigation bar / dock area
+- DO NOT use `drag(...)` for vertical scrolling. Use `scroll(direction='up'|'down', ...)`.
 
 ## Pre-flight (dynamic)
 
