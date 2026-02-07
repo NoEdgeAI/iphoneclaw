@@ -30,5 +30,6 @@ def system_prompt_v15(language: str = "en") -> str:
         "  using the iPhone IME and select the Chinese candidate via clicks. Do NOT output Chinese characters in type().\n"
         "- iPhone Home/App Library scrolling: perform scroll/swipe near the bottom (just above the tab bar / dock),\n"
         "  not in the middle of the screen.\n"
+        "- Vertical scrolling: DO NOT use `drag(...)` to scroll up/down. Use `scroll(direction='up'|'down', ...)`.\n"
         f"- Respond in language: {language}\n"
     )
