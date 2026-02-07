@@ -136,21 +136,19 @@ python -m iphoneclaw run \
 
 | Model ID | Description |
 |----------|-------------|
-| `doubao-1.5-ui-tars-250328` | GUI agent model (recommended) |
-| `doubao-1.5-thinking-vision-pro-250428` | Vision + deep thinking |
+| `doubao-seed-1-6-vision-250815` | Vision model (recommended) |
 
 **Setup:**
 
 1. Register at [console.volcengine.com](https://console.volcengine.com) and complete real-name authentication
 2. Create an API key in the Ark console
-3. New accounts get a **free 500K token quota**
 
 **Run iphoneclaw:**
 
 ```bash
 export IPHONECLAW_MODEL_BASE_URL="https://ark.cn-beijing.volces.com/api/v3"
 export IPHONECLAW_MODEL_API_KEY="your-ark-api-key"
-export IPHONECLAW_MODEL_NAME="doubao-1.5-ui-tars-250328"
+export IPHONECLAW_MODEL_NAME="doubao-seed-1-6-vision-250815"
 
 python -m iphoneclaw run \
   --instruction "Open Settings and enable Wi-Fi"
@@ -163,18 +161,7 @@ python -m iphoneclaw run \
   --instruction "Open Settings and enable Wi-Fi" \
   --base-url "https://ark.cn-beijing.volces.com/api/v3" \
   --api-key "$ARK_API_KEY" \
-  --model "doubao-1.5-ui-tars-250328"
-```
-
-For the thinking model, enable deep thinking:
-
-```bash
-python -m iphoneclaw run \
-  --instruction "Open Settings and enable Wi-Fi" \
-  --base-url "https://ark.cn-beijing.volces.com/api/v3" \
-  --api-key "$ARK_API_KEY" \
-  --model "doubao-1.5-thinking-vision-pro-250428" \
-  --volc-thinking-type enabled
+  --model "doubao-seed-1-6-vision-250815"
 ```
 
 ## Quick Start
@@ -208,7 +195,6 @@ iphoneclaw windows         List visible windows (debug)
 iphoneclaw run             Run the agent loop + supervisor API
 iphoneclaw serve           Start supervisor API only (no worker)
 iphoneclaw ctl             Control a running worker via supervisor
-iphoneclaw applescript-bridge   Run AppleScript bridge server
 ```
 
 ## Supervisor API
@@ -237,7 +223,6 @@ If CGEvent/clipboard typing is unreliable, iphoneclaw can type via **System Even
 ```bash
 export IPHONECLAW_APPLESCRIPT_MODE=native    # default
 export IPHONECLAW_APPLESCRIPT_MODE=osascript # fallback via /usr/bin/osascript
-export IPHONECLAW_APPLESCRIPT_MODE=bridge    # via external bridge server
 ```
 
 ## Environment Variables
@@ -253,7 +238,7 @@ export IPHONECLAW_APPLESCRIPT_MODE=bridge    # via external bridge server
 | `IPHONECLAW_SUPERVISOR_PORT` | Supervisor bind port | `17334` |
 | `IPHONECLAW_SUPERVISOR_TOKEN` | Supervisor bearer token | (empty) |
 | `IPHONECLAW_RECORD_DIR` | Run recording directory | `./runs` |
-| `IPHONECLAW_APPLESCRIPT_MODE` | Typing mode: native/osascript/bridge | `native` |
+| `IPHONECLAW_APPLESCRIPT_MODE` | Typing mode: native/osascript | `native` |
 
 ## Claude Code Integration
 
@@ -287,3 +272,7 @@ Ensure model environment variables are set before invoking (`IPHONECLAW_MODEL_BA
 
 - Architecture / implementation plan: `PLAN.md`
 - Claude Code skill: `.claude/skills/iphoneclaw/SKILL.md`
+
+## Thanks
+
+- [UI-TARS](https://github.com/bytedance/UI-TARS)
