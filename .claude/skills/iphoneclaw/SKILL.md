@@ -26,6 +26,14 @@ You **never** see screenshots. You only see the worker's `Thought:` / `Action:` 
 
 The worker enforces: `type(content=...)` must be **ASCII only**. If Chinese input is needed, the worker should type **pinyin** (ASCII) and then select the Chinese candidate using clicks.
 
+## Avoid iPhone Home Search (Spotlight)
+
+Do NOT rely on the iPhone Home Screen search / Spotlight workflow to find apps. In iPhone Mirroring, Spotlight text input is often unreliable (IME / focus issues).
+Prefer opening apps via:
+- tapping the app icon directly
+- App Library navigation
+- in-app search boxes (once inside the app)
+
 ## Pre-flight (dynamic)
 
 Permission check result:
