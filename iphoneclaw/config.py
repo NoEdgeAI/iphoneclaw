@@ -11,7 +11,7 @@ class Config:
     # Model
     model_base_url: str = "http://localhost:8000/v1"
     model_api_key: str = ""
-    model_name: str = "unitar"
+    model_name: str = "doubao-1-5-ui-tars-250428"
     # Many OpenAI-compatible providers reject very large max_tokens with HTTP 400.
     max_tokens: int = 8192
     temperature: float = 0.0

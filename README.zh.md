@@ -97,7 +97,7 @@ python -m iphoneclaw run \
 ```bash
 export IPHONECLAW_MODEL_BASE_URL="https://ark.cn-beijing.volces.com/api/v3"
 export IPHONECLAW_MODEL_API_KEY="your-ark-api-key"
-export IPHONECLAW_MODEL_NAME="doubao-seed-1-6-vision-250815"
+export IPHONECLAW_MODEL_NAME="doubao-1-5-ui-tars-250428"
 
 python -m iphoneclaw run \
   --instruction "打开设置并开启 Wi-Fi"
@@ -190,7 +190,7 @@ export IPHONECLAW_APPLESCRIPT_MODE=osascript # 通过 /usr/bin/osascript fallbac
 |------|------|--------|
 | `IPHONECLAW_MODEL_BASE_URL` | 模型 API base URL | `http://localhost:8000/v1` |
 | `IPHONECLAW_MODEL_API_KEY` | 模型 API key | (空) |
-| `IPHONECLAW_MODEL_NAME` | 模型名 | `unitar` |
+| `IPHONECLAW_MODEL_NAME` | 模型名 | `doubao-1-5-ui-tars-250428` |
 | `IPHONECLAW_TARGET_APP` | 要控制的 macOS 应用名 | `iPhone Mirroring` |
 | `IPHONECLAW_WINDOW_CONTAINS` | 窗口匹配子串 | (空) |
 | `IPHONECLAW_SUPERVISOR_HOST` | Supervisor host | `127.0.0.1` |

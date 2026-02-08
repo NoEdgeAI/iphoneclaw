@@ -149,7 +149,7 @@ python -m iphoneclaw run \
 
 | Model ID | Description |
 |----------|-------------|
-| `doubao-seed-1-6-vision-250815` | Vision model (recommended) |
+| `doubao-1-5-ui-tars-250428` | Vision model (recommended) |
 
 **Setup:**
 
@@ -161,7 +161,7 @@ python -m iphoneclaw run \
 ```bash
 export IPHONECLAW_MODEL_BASE_URL="https://ark.cn-beijing.volces.com/api/v3"
 export IPHONECLAW_MODEL_API_KEY="your-ark-api-key"
-export IPHONECLAW_MODEL_NAME="doubao-seed-1-6-vision-250815"
+export IPHONECLAW_MODEL_NAME="doubao-1-5-ui-tars-250428"
 
 python -m iphoneclaw run \
   --instruction "Open Settings and enable Wi-Fi"
@@ -174,7 +174,7 @@ python -m iphoneclaw run \
   --instruction "Open Settings and enable Wi-Fi" \
   --base-url "https://ark.cn-beijing.volces.com/api/v3" \
   --api-key "$ARK_API_KEY" \
-  --model "doubao-seed-1-6-vision-250815"
+  --model "doubao-1-5-ui-tars-250428"
 ```
 
 ## Quick Start
@@ -244,7 +244,7 @@ export IPHONECLAW_APPLESCRIPT_MODE=osascript # fallback via /usr/bin/osascript
 |----------|-------------|---------|
 | `IPHONECLAW_MODEL_BASE_URL` | Model API base URL | `http://localhost:8000/v1` |
 | `IPHONECLAW_MODEL_API_KEY` | Model API key | (empty) |
-| `IPHONECLAW_MODEL_NAME` | Model name | `unitar` |
+| `IPHONECLAW_MODEL_NAME` | Model name | `doubao-1-5-ui-tars-250428` |
 | `IPHONECLAW_TARGET_APP` | macOS app to control | `iPhone Mirroring` |
 | `IPHONECLAW_WINDOW_CONTAINS` | Window match substring | (empty) |
 | `IPHONECLAW_SUPERVISOR_HOST` | Supervisor bind host | `127.0.0.1` |
