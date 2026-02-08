@@ -8,7 +8,7 @@ description: >
 context: fork
 agent: general-purpose
 disable-model-invocation: true
-allowed-tools: Bash(python -m iphoneclaw *), Bash(sleep *), Bash(ps *), Bash(kill -15 *), Read
+allowed-tools: Bash(python -m iphoneclaw *), Bash(sleep *), Bash(ps *), Bash(kill -15 *), Read, Write
 argument-hint: "[instruction for the iPhone agent]"
 ---
 
@@ -21,6 +21,18 @@ You are a **supervisor subagent**. Your job:
 4. Stop the worker and return a concise summary when done
 
 You **never** see screenshots. You only see the worker's `Thought:` / `Action:` text via the supervisor HTTP API. The worker handles vision + action execution autonomously.
+
+## Diary (Continuous Learning)
+
+This repo contains a supervisor-written diary at `WORKER_DIARY.md`.
+
+Before starting a task:
+- Read `WORKER_DIARY.md` and extract any relevant rules for this instruction.
+- Keep those rules in mind when injecting guidance.
+
+After the task finishes (or is stopped):
+- Append 1 short diary entry if you learned something new.
+- Keep it actionable and text-only (no secrets, no screenshots).
 
 ## Typing Constraint (Chinese IME)
 
@@ -43,6 +55,9 @@ When the worker needs to scroll on the iPhone Home Screen / App Library:
 - `scroll(...)` should be wheel-only (move cursor + wheel). Avoid "click to focus" before scrolling, since it may open a video/item under the cursor.
 
 ## Pre-flight (dynamic)
+
+Read the supervisor diary and keep relevant rules in mind:
+!`python - <<'PY'\nfrom pathlib import Path\np=Path('WORKER_DIARY.md')\nprint(p.read_text(encoding='utf-8') if p.exists() else '(no WORKER_DIARY.md yet)')\nPY`
 
 Permission check result:
 !`python -m iphoneclaw doctor 2>&1 || true`
@@ -154,3 +169,12 @@ Return a **concise summary** to the user:
 - If `ctl context` fails to connect, check with `ps aux | grep iphoneclaw`. If the worker crashed, report it.
 - Keep injected guidance concise and actionable (1-2 sentences).
 - Do NOT exceed 20 polling iterations. Stop and report partial progress.
+
+### Diary Update (append-only)
+
+If you observed a new failure mode or a new best practice, append a short entry to `WORKER_DIARY.md`.
+
+Process:
+1. Read current `WORKER_DIARY.md` (if it exists).
+2. Append a new entry at the end under "Entry Template" format.
+3. Use the `Write` tool to write the full updated file back.
