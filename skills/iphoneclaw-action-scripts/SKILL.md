@@ -13,6 +13,41 @@ Key files:
 - `action_scripts/common/*.txt`: curated scripts
 - `action_scripts/recorded/*.txt`: recordings/exports
 
+## Priority Rules (MUST follow)
+
+**When a registered script covers the task, ALWAYS use `run_script(...)` instead of manually composing individual actions.**
+
+### 1. Launching an App -> ALWAYS use `open_app_spotlight`
+
+Do NOT manually compose `iphone_home()`, `swipe`, `type` sequences to open an app.
+Instead, emit a single action:
+```text
+Action: run_script(name='open_app_spotlight', APP='<app_name>')
+```
+
+Examples:
+```text
+Action: run_script(name='open_app_spotlight', APP='bilibili')
+Action: run_script(name='open_app_spotlight', APP='Safari')
+Action: run_script(name='open_app_spotlight', APP='Settings')
+Action: run_script(name='open_app_spotlight', APP='WeChat')
+```
+
+This script does: Home -> swipe left x10 -> swipe up (Spotlight) -> type app name + Enter.
+
+
+
+### General Rule
+
+Before composing a multi-step action sequence, check `action_scripts/registry.json` for an existing script that covers the flow. If one exists, use `run_script(name=...)`. This saves tokens and is more reliable than ad-hoc action chains.
+
+## Available Scripts (Registry)
+
+| Short Name | Script | Description |
+|---|---|---|
+| `open_app_spotlight` | `common/open_app_spotlight.txt` | Open any app via Spotlight. Var: `APP` |
+| `iphone_home_swipe_left_10_then_down` | `common/iphone_home_swipe_left_10_then_down.txt` | Home + swipe left x10 + swipe down |
+
 ## Preferred Model Output (Low Token)
 
 When a stable flow exists, output a single action:
