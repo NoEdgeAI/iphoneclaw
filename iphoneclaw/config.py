@@ -64,8 +64,9 @@ class Config:
     scroll_focus_click: bool = False
     scroll_invert_y: bool = False
 
-    # UX: restore mouse cursor position after each action, so the operator can keep using their Mac.
-    restore_cursor: bool = True
+    # UX: restore mouse cursor position after each action.
+    # Default OFF: restoring can feel "fighty" while the operator uses the Mac.
+    restore_cursor: bool = False
 
     # Double-click timing: some iPhone UIs require a slightly slower double-click to show controls.
     double_click_interval_ms: int = 50

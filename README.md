@@ -252,7 +252,7 @@ export IPHONECLAW_APPLESCRIPT_MODE=osascript # fallback via /usr/bin/osascript
 | `IPHONECLAW_SUPERVISOR_TOKEN` | Supervisor bearer token | (empty) |
 | `IPHONECLAW_RECORD_DIR` | Run recording directory | `./runs` |
 | `IPHONECLAW_APPLESCRIPT_MODE` | Typing mode: native/osascript | `native` |
-| `IPHONECLAW_RESTORE_CURSOR` | Restore mouse cursor position after each action (1/0) | `1` |
+| `IPHONECLAW_RESTORE_CURSOR` | Restore mouse cursor position after each action (1/0) | `0` |
 | `IPHONECLAW_AUTO_PAUSE_ON_USER_INPUT` | Auto-pause when user touches mouse/keyboard (1/0) | `0` |
 | `IPHONECLAW_TYPE_ASCII_ONLY` | Reject non-ASCII `type(content=...)` (use pinyin + IME for Chinese) (1/0) | `1` |
 | `IPHONECLAW_SCROLL_INVERT_Y` | Invert vertical wheel scroll direction (1/0) | `0` |
