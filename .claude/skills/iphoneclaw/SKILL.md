@@ -243,6 +243,39 @@ Example (double click to show video controls):
 python -m iphoneclaw ctl exec --action "double_click(start_box='<|box_start|>(500,500)<|box_end|>', interval_ms=50)"
 ```
 
+### Emergency Recovery: Kill App via App Switcher (when truly stuck)
+
+If the worker is clearly stuck for a long time (looping, cannot navigate back, cannot exit a fullscreen player) and normal `inject` guidance is not working, do a hard recovery by killing the current app from the iPhone App Switcher.
+
+Procedure (manual control):
+1) Pause the worker:
+```bash
+python -m iphoneclaw ctl pause
+```
+
+2) Open App Switcher (Cmd+2):
+```bash
+python -m iphoneclaw ctl exec --action "iphone_app_switcher()"
+```
+
+3) Kill the current app card: drag up a long distance from the middle-right area.
+Use a large vertical swipe to avoid "half swipe" that does nothing.
+```bash
+python -m iphoneclaw ctl exec \
+  --action "drag(start_box='<|box_start|>(800,650)<|box_end|>', end_box='<|box_start|>(800,120)<|box_end|>')"
+```
+
+4) Return to Home (Cmd+1) and re-enter the app (tap icon; avoid Spotlight):
+```bash
+python -m iphoneclaw ctl exec --action "iphone_home()"
+```
+Then tap the app icon from Home/App Library (do NOT use iPhone Home search / Spotlight).
+
+5) Inject a short reset guidance and resume:
+```bash
+python -m iphoneclaw ctl inject --text "Recovery done: app was killed and relaunched. Continue the task from the current screen. Avoid the previous stuck path." --resume
+```
+
 ## Phase 3 — Report
 
 After stopping the worker (or it ended), do a final context fetch:
