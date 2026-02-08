@@ -15,10 +15,11 @@ Official site: https://iphoneclaw.com
 macOS-only Python CLI worker that controls the **iPhone Mirroring / iPhone镜像** window using a VLM (Vision Language Model) agent loop:
 
 1. Capture window screenshot (Quartz CGWindowList)
-2. Call an OpenAI-compatible vision chat endpoint
-3. Parse `Thought:` / `Action:`
-4. Execute actions via Quartz CGEvent (mouse / keyboard)
-5. Record each step to `runs/`
+2. **L0 memoization check** — if the screen fingerprint (dHash) matches a previously seen screen with a known-good action, replay it instantly and skip the VLM call
+3. Call an OpenAI-compatible vision chat endpoint (skipped on L0 cache hit)
+4. Parse `Thought:` / `Action:`
+5. Execute actions via Quartz CGEvent (mouse / keyboard)
+6. Verify & record each step to `runs/`
 
 It also exposes a **local Supervisor API** (text-only + SSE) so external agent frameworks can supervise the run:
 poll the latest conversation (tail N rounds), subscribe to live events, and intervene with `pause/resume/stop/inject`.
@@ -259,6 +260,11 @@ export IPHONECLAW_APPLESCRIPT_MODE=osascript # fallback via /usr/bin/osascript
 | `IPHONECLAW_TYPE_ASCII_ONLY` | Reject non-ASCII `type(content=...)` (use pinyin + IME for Chinese) (1/0) | `1` |
 | `IPHONECLAW_SCROLL_INVERT_Y` | Invert vertical wheel scroll direction (1/0) | `0` |
 | `IPHONECLAW_SCROLL_FOCUS_CLICK` | Click to focus before wheel scroll (risk: opens items under cursor) (1/0) | `0` |
+| `IPHONECLAW_AUTOMATION_ENABLE` | Enable L0 in-run memoization (replay cached actions for repeated screens) (1/0) | `1` |
+| `IPHONECLAW_AUTOMATION_L0_ENABLE` | Enable L0 cache (effective only when automation is enabled) (1/0) | `1` |
+| `IPHONECLAW_AUTOMATION_HASH_THRESHOLD` | Max hamming distance for dHash near-match (0 = exact only) | `5` |
+| `IPHONECLAW_AUTOMATION_MAX_REUSE` | Max times a single cache entry can be replayed | `3` |
+| `IPHONECLAW_AUTOMATION_VERBOSE` | Print L0 hit/miss/verify events to stderr (1/0) | `1` |
 
 ## Claude Code Integration
 
@@ -307,10 +313,43 @@ Ensure model environment variables are set before invoking (`IPHONECLAW_MODEL_BA
 2. [QuantumNous/new-api](https://github.com/QuantumNous/new-api) - Next-Generation LLM Gateway and AI Asset Management System.
 3. [teamoteam.com](https://teamoteam.com) - Zero-deploy cloud ClawDBot, smart agents.
 
+## L0 In-Run Memoization
+
+iphoneclaw includes an **L0 memoization layer** that caches screen fingerprints (64-bit dHash) within a single run. When the same screen reappears (e.g., repeated scrolling, dismissing the same overlay), it replays the known-good action instantly instead of calling the VLM — saving time and tokens.
+
+- **Zero new dependencies** — dHash is computed via pure PyObjC/Quartz (grayscale CGBitmapContext)
+- **Safe fallback** — if verification fails (screen didn't change), it falls back to the VLM
+- **Per-entry reuse limit** (default 3) prevents infinite loops
+- **Status bar masking** — top 8% of the screenshot is cropped before hashing to ignore clock/battery changes
+
+Enable via `IPHONECLAW_AUTOMATION_ENABLE=1` (default on). CLI output:
+
+```
+[iphoneclaw] L0 cache HIT step=5 hit#1 action=scroll(direction='down')
+[iphoneclaw] L0 verify OK step=5 (VLM call skipped)
+```
+
+## Action Space
+
+| Action | Description |
+|--------|-------------|
+| `click(start_box=...)` | Tap at coordinates |
+| `double_click(start_box=...)` | Double-tap |
+| `drag(start_box=..., end_box=...)` | Precise element dragging (sliders, reordering only) |
+| `scroll(direction=...)` | Incremental content scrolling (mouse wheel) |
+| `swipe(direction=...)` | Fast page-level gesture (trackpad two-finger swipe) |
+| `type(content=...)` | Type text (ASCII only; use pinyin + IME for Chinese) |
+| `hotkey(key=...)` | Keyboard shortcut |
+| `iphone_home()` | Go to iPhone Home Screen |
+| `iphone_app_switcher()` | Open iPhone App Switcher |
+| `wait()` | Sleep 5s and check for changes |
+| `finished()` | Task complete |
+| `call_user()` | Request human help |
+
 ## TODO
 
 1. Fine-tune UI-TARS-1.5 7B to better fit iOS interaction patterns.
-2. Add deterministic automation scripts to reduce token burn and increase speed/accuracy for known flows.
+2. ~~Add deterministic automation scripts to reduce token burn and increase speed/accuracy for known flows.~~ (L0 memoization done; L1 deterministic scripts planned)
 3. Build an iPhone-agent data labeling pipeline: use agents to generate high-quality cold-start data (UI-TARS-2 style), with less manual annotation.
 
 ## License

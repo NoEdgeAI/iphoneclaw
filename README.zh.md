@@ -17,10 +17,11 @@
 核心流程:
 
 1. 截取 iPhone 镜像窗口截图（Quartz CGWindowList）
-2. 调用 OpenAI-compatible 的多模态接口
-3. 解析 `Thought:` / `Action:`
-4. 用 Quartz CGEvent 执行鼠标/键盘操作
-5. 记录每一步到 `runs/`
+2. **L0 记忆缓存检查** — 如果截图指纹（dHash）匹配到之前已成功执行过的屏幕，直接重放缓存动作，跳过 VLM 调用
+3. 调用 OpenAI-compatible 的多模态接口（L0 命中时跳过）
+4. 解析 `Thought:` / `Action:`
+5. 用 Quartz CGEvent 执行鼠标/键盘操作
+6. 验证并记录每一步到 `runs/`
 
 同时提供 **本地 Supervisor API**（仅文本 + SSE），便于外部 Agent 框架监督运行：拉取最近 N 轮对话、订阅实时事件，并通过 `pause/resume/stop/inject` 进行干预。设计目标是可以接入 **Claude Code / Codex** 等编排框架，让“老板 Agent”监管这个 UI Worker。
 
@@ -205,6 +206,11 @@ export IPHONECLAW_APPLESCRIPT_MODE=osascript # 通过 /usr/bin/osascript fallbac
 | `IPHONECLAW_TYPE_ASCII_ONLY` | 禁止在 `type(content=...)` 里输出中文（用拼音 + 输入法候选）(1/0) | `1` |
 | `IPHONECLAW_SCROLL_INVERT_Y` | 反转竖向滚轮方向（1/0） | `0` |
 | `IPHONECLAW_SCROLL_FOCUS_CLICK` | 滚动前点击聚焦（风险：可能点进视频/条目）(1/0) | `0` |
+| `IPHONECLAW_AUTOMATION_ENABLE` | 启用 L0 运行内记忆缓存（对重复屏幕重放缓存动作）(1/0) | `1` |
+| `IPHONECLAW_AUTOMATION_L0_ENABLE` | 启用 L0 缓存（仅在 automation 开启时生效）(1/0) | `1` |
+| `IPHONECLAW_AUTOMATION_HASH_THRESHOLD` | dHash 近似匹配最大汉明距离（0 = 仅精确匹配） | `5` |
+| `IPHONECLAW_AUTOMATION_MAX_REUSE` | 单条缓存最多重放次数 | `3` |
+| `IPHONECLAW_AUTOMATION_VERBOSE` | 在 stderr 打印 L0 命中/验证事件（1/0） | `1` |
 
 ## Claude Code 集成
 
@@ -251,10 +257,43 @@ cp .claude/skills/iphoneclaw/SKILL.md ~/.claude/skills/iphoneclaw/SKILL.md
 2. [QuantumNous/new-api](https://github.com/QuantumNous/new-api) - 下一代 LLM 网关与 AI 资产管理系统。
 3. [teamoteam.com](https://teamoteam.com) - 免部署云端 ClawDBot，智能 Agent。
 
+## L0 运行内记忆缓存
+
+iphoneclaw 内置 **L0 记忆缓存层**，在单次运行中缓存截图指纹（64-bit dHash）。当相同屏幕再次出现时（如重复滚动、关闭同一弹窗），直接重放已知的正确动作，跳过 VLM 调用，节省时间和 token。
+
+- **零新增依赖** — dHash 使用纯 PyObjC/Quartz 计算（灰度 CGBitmapContext）
+- **安全回退** — 验证失败（屏幕未变化）时自动回退到 VLM
+- **单条重放上限**（默认 3 次）防止无限循环
+- **状态栏遮罩** — 哈希前裁掉顶部 8% 区域，忽略时间/电量变化
+
+默认开启（`IPHONECLAW_AUTOMATION_ENABLE=1`）。CLI 输出示例：
+
+```
+[iphoneclaw] L0 cache HIT step=5 hit#1 action=scroll(direction='down')
+[iphoneclaw] L0 verify OK step=5 (VLM call skipped)
+```
+
+## 动作空间
+
+| 动作 | 说明 |
+|------|------|
+| `click(start_box=...)` | 点击指定坐标 |
+| `double_click(start_box=...)` | 双击 |
+| `drag(start_box=..., end_box=...)` | 精确拖拽（仅用于滑块、排序等） |
+| `scroll(direction=...)` | 内容滚动（鼠标滚轮） |
+| `swipe(direction=...)` | 快速翻页手势（触控板双指滑动） |
+| `type(content=...)` | 输入文本（仅 ASCII；中文用拼音 + 输入法候选） |
+| `hotkey(key=...)` | 键盘快捷键 |
+| `iphone_home()` | iPhone 主屏幕 |
+| `iphone_app_switcher()` | iPhone 应用切换器 |
+| `wait()` | 等待 5 秒并检查变化 |
+| `finished()` | 任务完成 |
+| `call_user()` | 请求人工帮助 |
+
 ## TODO
 
 1. 微调 UI-TARS-1.5 7B，让它更贴合 iOS 的交互逻辑。
-2. 加入一些确定性自动化脚本，减少 token 消耗，并提升速度与准确率（尤其是 agent 已探索清楚的固定流程）。
+2. ~~加入一些确定性自动化脚本，减少 token 消耗，并提升速度与准确率（尤其是 agent 已探索清楚的固定流程）。~~ （L0 记忆缓存已完成；L1 确定性脚本在计划中）
 3. 打造 iPhone agent 的数据标注管线：用 agent 生成高质量冷启动数据（参考 UI-TARS-2 的做法），同时减少人工标注依赖。
 
 ## 许可证
