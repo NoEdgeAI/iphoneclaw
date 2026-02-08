@@ -272,7 +272,7 @@ iphoneclaw ships with a [Claude Code skill](https://code.claude.com/docs/en/skil
 The skill uses `context: fork` to run in an isolated subagent — polling noise stays out of your main conversation.
 
 **Recommended supervisor models (for the boss agent, not the iPhone vision worker):**
-- Claude Code: prefer **sonnet4.5d** for fast, frequent polling and interventions.
+- Claude Code: prefer **sonnet4.5** for fast, frequent polling and interventions.
 - Codex: prefer **gpt-5.3-codex-low** for cheap, fast supervision loops.
 
 **Setup:** The skill is auto-discovered from `.claude/skills/iphoneclaw/SKILL.md` when you open this project in Claude Code. For cross-project use, copy to your home directory:
@@ -300,6 +300,12 @@ Ensure model environment variables are set before invoking (`IPHONECLAW_MODEL_BA
 ## Thanks
 
 - [UI-TARS](https://github.com/bytedance/UI-TARS)
+
+## TODO
+
+1. Fine-tune UI-TARS-1.5 7B to better fit iOS interaction patterns.
+2. Add deterministic automation scripts to reduce token burn and increase speed/accuracy for known flows.
+3. Build an iPhone-agent data labeling pipeline: use agents to generate high-quality cold-start data (UI-TARS-2 style), with less manual annotation.
 
 ## License
 

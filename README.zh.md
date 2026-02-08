@@ -216,7 +216,7 @@ iphoneclaw 自带 [Claude Code skill](https://code.claude.com/docs/en/skills)，
 4. 完成后给出简洁总结
 
 **推荐的“老板 Agent”模型（注意：这是 supervisor 的模型，不是 iPhone 视觉 worker 的模型）：**
-- Claude Code: 推荐用 **sonnet4.5d**，更适合高频轮询和快速干预。
+- Claude Code: 推荐用 **sonnet4.5**，更适合高频轮询和快速干预。
 - Codex: 推荐用 **gpt-5.3-codex-low**，用于便宜快速的监督循环。
 
 Skill 默认在 `.claude/skills/iphoneclaw/SKILL.md`，Claude Code 打开本项目会自动发现。跨项目使用可复制到用户目录：
@@ -244,6 +244,12 @@ cp .claude/skills/iphoneclaw/SKILL.md ~/.claude/skills/iphoneclaw/SKILL.md
 ## 致谢
 
 - [UI-TARS](https://github.com/bytedance/UI-TARS)
+
+## TODO
+
+1. 微调 UI-TARS-1.5 7B，让它更贴合 iOS 的交互逻辑。
+2. 加入一些确定性自动化脚本，减少 token 消耗，并提升速度与准确率（尤其是 agent 已探索清楚的固定流程）。
+3. 打造 iPhone agent 的数据标注管线：用 agent 生成高质量冷启动数据（参考 UI-TARS-2 的做法），同时减少人工标注依赖。
 
 ## 许可证
 
