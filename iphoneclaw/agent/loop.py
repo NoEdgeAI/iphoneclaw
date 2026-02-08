@@ -277,7 +277,8 @@ class Worker:
                             pass
                         self.control.set_status(StatusEnum.HANG)
                         self.control.pause()
-                        self.hub.set_status(self.control.snapshot()["status"], reason="repeat_action_streak", **payload)
+                        # NOTE: payload already contains "reason"; do not pass duplicate kwargs.
+                        self.hub.set_status(self.control.snapshot()["status"], **payload)
                         self.hub.publish("needs_supervisor", payload)
                         break
 
