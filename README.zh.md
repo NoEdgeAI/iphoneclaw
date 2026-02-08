@@ -209,9 +209,13 @@ export IPHONECLAW_APPLESCRIPT_MODE=osascript # 通过 /usr/bin/osascript fallbac
 iphoneclaw 自带 [Claude Code skill](https://code.claude.com/docs/en/skills)，可以让 Claude 作为“老板 Agent”自动监督 worker：
 
 1. 后台启动 iphoneclaw worker
-2. 定时轮询 Supervisor API（只读文本）
+2. 每 ~10 秒轮询 Supervisor API（只读文本）
 3. 发现偏航时 `pause/resume/inject` 干预
 4. 完成后给出简洁总结
+
+**推荐的“老板 Agent”模型（注意：这是 supervisor 的模型，不是 iPhone 视觉 worker 的模型）：**
+- Claude Code: 推荐用 **Haiku**，更适合高频轮询和快速干预。
+- Codex: 推荐用 **gpt-5.3-codex-low**，用于便宜快速的监督循环。
 
 Skill 默认在 `.claude/skills/iphoneclaw/SKILL.md`，Claude Code 打开本项目会自动发现。跨项目使用可复制到用户目录：
 

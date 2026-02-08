@@ -263,11 +263,15 @@ export IPHONECLAW_APPLESCRIPT_MODE=osascript # fallback via /usr/bin/osascript
 iphoneclaw ships with a [Claude Code skill](https://code.claude.com/docs/en/skills) that lets Claude supervise the worker autonomously. When invoked, Claude:
 
 1. Starts the iphoneclaw worker in the background
-2. Polls the Supervisor API every ~20 seconds (text only, no screenshots)
+2. Polls the Supervisor API every ~10 seconds (text only, no screenshots)
 3. Intervenes if the worker goes off-track
 4. Returns a concise summary when done
 
 The skill uses `context: fork` to run in an isolated subagent — polling noise stays out of your main conversation.
+
+**Recommended supervisor models (for the boss agent, not the iPhone vision worker):**
+- Claude Code: prefer **Haiku** for fast, frequent polling and interventions.
+- Codex: prefer **gpt-5.3-codex-low** for cheap, fast supervision loops.
 
 **Setup:** The skill is auto-discovered from `.claude/skills/iphoneclaw/SKILL.md` when you open this project in Claude Code. For cross-project use, copy to your home directory:
 
