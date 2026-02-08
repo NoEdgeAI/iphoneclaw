@@ -155,6 +155,49 @@ iphoneclaw windows         枚举可见窗口（调试用）
 iphoneclaw run             运行 agent loop + supervisor API
 iphoneclaw serve           只启动 supervisor API（不跑 worker）
 iphoneclaw ctl             通过 supervisor API 控制/查看 worker
+iphoneclaw script          动作脚本（解析/运行/录制/导出）
+```
+
+## 动作脚本（L1）
+
+iphoneclaw 支持 **本地动作脚本** 来减少 token 消耗，并把常见操作流程固化为可复用的脚本。
+
+- 注册表：`action_scripts/registry.json`（短名 -> 脚本路径）
+- 脚本文件：`action_scripts/common/*.txt`（常用）与 `action_scripts/recorded/*.txt`（录制/导出）
+- 模型/agent 可以只输出一个低 token 的动作：
+  - `run_script(name='open_app_spotlight', APP='bilibili')`
+  - worker 会把它展开成具体动作序列并执行
+
+### 本地运行脚本
+
+```bash
+python -m iphoneclaw script run --file action_scripts/common/open_app_spotlight.txt --var APP=bilibili
+```
+
+### 录制或导出脚本
+
+```bash
+# 从 stdin 录制（Ctrl-D 结束）
+python -m iphoneclaw script record --out action_scripts/recorded/my_flow.txt
+
+# 从历史 runs/<id>/events.jsonl 导出可重放脚本
+python -m iphoneclaw script from-run --run-dir runs/<run_id> --out action_scripts/recorded/<run_id>.txt
+```
+
+### 注册脚本（短名）
+
+在 `action_scripts/registry.json` 增加一条映射：
+
+```json
+{
+  "my_flow": "recorded/my_flow.txt"
+}
+```
+
+之后模型可以调用：
+
+```text
+Action: run_script(name='my_flow')
 ```
 
 ## Supervisor API
@@ -172,6 +215,9 @@ python -m iphoneclaw ctl stop
 
 # 注入指导上下文（下一次模型调用会带上）
 python -m iphoneclaw ctl inject --text "只打开 Wi-Fi，不要修改其他设置。" --resume
+
+# worker paused 时，远程触发执行已注册的动作脚本
+python -m iphoneclaw ctl run-script --name open_app_spotlight --var APP=bilibili
 ```
 
 SSE 事件流: `GET /v1/agent/events`

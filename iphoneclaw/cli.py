@@ -20,6 +20,9 @@ from iphoneclaw.macos.window import list_on_screen_windows
 from iphoneclaw.agent.conversation import ConversationStore
 from iphoneclaw.agent.loop import Worker
 
+from iphoneclaw.automation.action_script import ScriptParseError, script_to_predictions
+from iphoneclaw.agent.executor import execute_action
+
 
 def _normalize_model_name(model: str) -> str:
     """
@@ -326,6 +329,9 @@ def cmd_ctl(args: argparse.Namespace) -> int:
         if isinstance(acts, str):
             acts = [acts]
         result = req("POST", "/v1/agent/exec", {"actions": list(acts)})
+    elif args.action == "run_script":
+        payload = {"name": args.name or "", "path": args.path or "", "vars": _parse_vars(args.var)}
+        result = req("POST", "/v1/agent/script/run", payload)
     elif args.action == "context":
         result = req("GET", "/v1/agent/context?tailRounds=%d" % int(args.tail))
     else:
@@ -437,6 +443,136 @@ def cmd_diary_grep(args: argparse.Namespace) -> int:
         print(str(e))
         return 2
 
+    return 0
+
+
+def _parse_vars(kvs: List[str]) -> dict:
+    out = {}
+    for item in kvs or []:
+        s = str(item)
+        if "=" not in s:
+            raise SystemExit("invalid --var, expected KEY=VALUE, got: %r" % s)
+        k, v = s.split("=", 1)
+        k = k.strip()
+        if not k:
+            raise SystemExit("invalid --var, empty key in: %r" % s)
+        out[k] = v
+    return out
+
+
+def cmd_script_run(args: argparse.Namespace) -> int:
+    cfg = load_config_from_env()
+    cfg.target_app = args.app
+    cfg.window_contains = args.window_contains or cfg.window_contains
+    cfg.dry_run = bool(args.dry_run)
+
+    path = os.path.abspath(args.file)
+    with open(path, "r", encoding="utf-8") as f:
+        src = f.read()
+
+    try:
+        preds = script_to_predictions(src, vars=_parse_vars(args.var), base_dir=os.path.dirname(path))
+    except ScriptParseError as e:
+        print("script parse error: %s" % str(e))
+        return 2
+
+    if not preds:
+        print("no actions")
+        return 0
+
+    wf = WindowFinder(app_name=args.app, window_contains=args.window_contains)
+    wf.find_window()
+    cap = ScreenCapture(wf)
+    shot = cap.capture()
+    wf.activate_app()
+
+    results = []
+    # Allow longer scripts; caller can keep them small, but CLI shouldn't hard-cap at 3.
+    for p in preds:
+        res = execute_action(cfg, p, shot)
+        results.append(res)
+        if not bool(res.get("ok")) and not bool(args.keep_going):
+            break
+
+    import json
+    print(json.dumps({"ok": True, "count": len(results), "results": results}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_script_record(args: argparse.Namespace) -> int:
+    """
+    Record a script by reading lines from stdin and writing to a .txt file.
+    This is a lightweight helper so users can build reusable scripts without a full editor.
+    """
+    out_path = os.path.abspath(args.out)
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+    print("recording to %s (Ctrl-D to finish)" % out_path)
+    lines: List[str] = []
+    try:
+        while True:
+            ln = input()
+            lines.append(ln)
+    except EOFError:
+        pass
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        for ln in lines:
+            f.write(ln.rstrip("\n") + "\n")
+    print("wrote %d lines" % len(lines))
+    return 0
+
+
+def cmd_script_from_run(args: argparse.Namespace) -> int:
+    """
+    Export raw executed actions from runs/<id>/events.jsonl into a replayable script.
+    """
+    run_dir = os.path.abspath(args.run_dir)
+    events_path = os.path.join(run_dir, "events.jsonl")
+    if not os.path.exists(events_path):
+        raise SystemExit("events.jsonl not found: %s" % events_path)
+
+    out_path = os.path.abspath(args.out)
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+    actions: List[str] = []
+    import json
+
+    with open(events_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
+            t = str(obj.get("type") or "")
+            if t == "exec":
+                data = obj.get("data") or {}
+                raw = str(data.get("raw_action") or "").strip()
+                if raw:
+                    actions.append(raw)
+            elif t == "supervisor_exec" and bool(args.include_supervisor_exec):
+                data = obj.get("data") or {}
+                acts = data.get("actions")
+                if isinstance(acts, str):
+                    acts = [acts]
+                if isinstance(acts, list):
+                    for a in acts:
+                        a = str(a).strip()
+                        if a:
+                            actions.append(a)
+
+    if not actions:
+        print("no actions found in %s" % events_path)
+        return 0
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write("# Exported from %s\n" % run_dir)
+        for a in actions:
+            f.write(a.rstrip("\n") + "\n")
+    print("wrote %s (%d actions)" % (out_path, len(actions)))
     return 0
 
 
@@ -581,6 +717,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sp_ex.set_defaults(action="exec_actions")
 
+    sp_rs = p_ctl_sub.add_parser("run-script", help="Run a registered script (or a script path) while worker is paused.")
+    sp_rs.add_argument("--name", default="", help="Registry short name (see action_scripts/registry.json).")
+    sp_rs.add_argument("--path", default="", help="Script file path (overrides --name).")
+    sp_rs.add_argument("--var", action="append", default=[], help="Template vars KEY=VALUE (for ${KEY}).")
+    sp_rs.set_defaults(action="run_script")
+
     p_diary = sub.add_parser("diary", help="Supervisor diary helpers (grep-friendly).")
     p_diary_sub = p_diary.add_subparsers(dest="action", required=True)
     p_dg = p_diary_sub.add_parser("grep", help="Grep WORKER_DIARY.md using auto keywords from task text.")
@@ -589,6 +731,27 @@ def build_parser() -> argparse.ArgumentParser:
     p_dg.add_argument("--tail", default=30, type=int, help="Max lines to print per section.")
     p_dg.add_argument("--keywords", default=6, type=int, help="Max auto-extracted keywords.")
     p_dg.set_defaults(func=cmd_diary_grep)
+
+    p_script = sub.add_parser("script", help="Action script helpers (parse/run/record/replay).")
+    p_script_sub = p_script.add_subparsers(dest="action", required=True)
+
+    sp_run = p_script_sub.add_parser("run", help="Run an action script (.txt) against the target window.")
+    _add_common_args(sp_run)
+    sp_run.add_argument("--file", required=True, help="Script path (txt).")
+    sp_run.add_argument("--var", action="append", default=[], help="Template vars KEY=VALUE (for ${KEY}).")
+    sp_run.add_argument("--dry-run", action="store_true", help="Parse but do not execute.")
+    sp_run.add_argument("--keep-going", action="store_true", help="Continue even if an action fails.")
+    sp_run.set_defaults(func=cmd_script_run)
+
+    sp_rec = p_script_sub.add_parser("record", help="Record a script by reading lines from stdin.")
+    sp_rec.add_argument("--out", required=True, help="Output script path.")
+    sp_rec.set_defaults(func=cmd_script_record)
+
+    sp_fr = p_script_sub.add_parser("from-run", help="Export executed actions from runs/<id>/events.jsonl.")
+    sp_fr.add_argument("--run-dir", required=True, help="Run directory (e.g. runs/20260208_154607).")
+    sp_fr.add_argument("--out", required=True, help="Output script path.")
+    sp_fr.add_argument("--include-supervisor-exec", action="store_true", help="Include supervisor_exec actions too.")
+    sp_fr.set_defaults(func=cmd_script_from_run)
 
     return p
 

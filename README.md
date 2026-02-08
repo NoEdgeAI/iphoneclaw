@@ -209,6 +209,49 @@ iphoneclaw windows         List visible windows (debug)
 iphoneclaw run             Run the agent loop + supervisor API
 iphoneclaw serve           Start supervisor API only (no worker)
 iphoneclaw ctl             Control a running worker via supervisor
+iphoneclaw script          Action scripts (parse/run/record/export)
+```
+
+## Action Scripts (L1)
+
+iphoneclaw supports **local action scripts** to reduce tokens and make common flows repeatable.
+
+- Registry: `action_scripts/registry.json` maps a short name to a `.txt` script file
+- Scripts can be executed locally via `iphoneclaw script ...`
+- The agent/model can output a single low-token action:
+  - `run_script(name='open_app_spotlight', APP='bilibili')`
+  - This expands into the underlying `.txt` script and executes the concrete actions
+
+### Run A Script Locally
+
+```bash
+python -m iphoneclaw script run --file action_scripts/common/open_app_spotlight.txt --var APP=bilibili
+```
+
+### Record Or Export A Script
+
+```bash
+# Record from stdin (Ctrl-D to finish)
+python -m iphoneclaw script record --out action_scripts/recorded/my_flow.txt
+
+# Export executed actions from a previous run (runs/<id>/events.jsonl)
+python -m iphoneclaw script from-run --run-dir runs/<run_id> --out action_scripts/recorded/<run_id>.txt
+```
+
+### Register A Script (Short Name)
+
+Add an entry to `action_scripts/registry.json`:
+
+```json
+{
+  "my_flow": "recorded/my_flow.txt"
+}
+```
+
+Then the model can call:
+
+```text
+Action: run_script(name='my_flow')
 ```
 
 ## Supervisor API
@@ -226,6 +269,9 @@ python -m iphoneclaw ctl stop
 
 # Inject guidance into the agent's context
 python -m iphoneclaw ctl inject --text "Only toggle Wi-Fi; do not change other settings." --resume
+
+# Run a registered action script while the worker is paused
+python -m iphoneclaw ctl run-script --name open_app_spotlight --var APP=bilibili
 ```
 
 SSE event stream: `GET /v1/agent/events`

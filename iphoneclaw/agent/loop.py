@@ -19,6 +19,7 @@ from iphoneclaw.parse.action_parser import parse_predictions
 from iphoneclaw.supervisor.hub import SupervisorHub
 from iphoneclaw.supervisor.state import WorkerControl
 from iphoneclaw.automation.router import L0Router
+from iphoneclaw.automation.action_script import expand_special_predictions
 from iphoneclaw.types import StatusEnum
 
 
@@ -375,6 +376,21 @@ class Worker:
 
                 # Execute each action sequentially (same screenshot mapping) until a terminal/hang.
                 exec_results: List[Dict[str, Any]] = []
+                # Expand run_script(...) into concrete actions before execution and caching.
+                try:
+                    non_err = expand_special_predictions(
+                        non_err, registry_path=str(getattr(self.cfg, "script_registry_path", "./action_scripts/registry.json"))
+                    )
+                except Exception as e:
+                    payload = {"reason": "run_script_error", "error": str(e), "step": step}
+                    self.recorder.log_event("needs_supervisor", payload)
+                    self.hub.publish("error", {"where": "run_script", **payload})
+                    self.control.set_status(StatusEnum.HANG)
+                    self.control.pause()
+                    self.hub.set_status(self.control.snapshot()["status"], **payload)
+                    self.hub.publish("hang", payload)
+                    continue
+
                 for pred in non_err:
                     # Terminal actions with hang semantics
                     if pred.action_type == "finished":

@@ -21,6 +21,7 @@ ACTION_SPACES_V1_5 = [
     "swipe(start_box='<|box_start|>(x1,y1)<|box_end|>', direction='down or up or right or left') # Fast swipe gesture for page navigation, back gesture, switching tabs etc.",
     "sleep(ms=50) # Fine-grained delay for multi-action sequences (or sleep(seconds=0.05)).",
     "wait() # Sleep for 5s and take a screenshot to check for any changes.",
+    "run_script(name='open_app_spotlight', APP='bilibili') # Expand a registered local script (see action_scripts/registry.json).",
     "finished()",
     "call_user() # Submit the task and call the user when the task is unsolvable, or when you need the user's help.",
 ]

@@ -44,6 +44,9 @@ class Config:
     # Default off for safety.
     enable_supervisor_exec: bool = True
 
+    # L1 scripts: short-name registry used by run_script(name=..., vars=...).
+    script_registry_path: str = "./action_scripts/registry.json"
+
     # Recording
     record_dir: str = "./runs"
 
@@ -112,6 +115,7 @@ def load_config_from_env() -> Config:
     c.enable_supervisor_exec = os.getenv(
         "IPHONECLAW_ENABLE_SUPERVISOR_EXEC", "1" if c.enable_supervisor_exec else "0"
     ).strip().lower() in ("1", "true", "yes", "y", "on")
+    c.script_registry_path = os.getenv("IPHONECLAW_SCRIPT_REGISTRY", c.script_registry_path)
 
     # AppleScript runner mode for typing/hotkeys.
     c.applescript_mode = os.getenv("IPHONECLAW_APPLESCRIPT_MODE", c.applescript_mode)

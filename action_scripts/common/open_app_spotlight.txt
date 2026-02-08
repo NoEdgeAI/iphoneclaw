@@ -1,0 +1,9 @@
+# Open an iOS app via Spotlight from the Home Screen.
+# Usage:
+#   python -m iphoneclaw script run --file action_scripts/common/open_app_spotlight.txt --var APP=bilibili
+iphone_home() sleep swipe left x 10, sleep 500ms,
+swipe up    
+sleep 120ms
+type ${APP}\\n
+sleep 350ms
+

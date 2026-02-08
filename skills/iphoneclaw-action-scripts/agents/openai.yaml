@@ -1,0 +1,4 @@
+interface:
+  display_name: "iPhoneClaw Action Scripts"
+  short_description: "Record and run iPhoneClaw action scripts"
+  default_prompt: "Use action_scripts/registry.json to invoke scripts by short name. Prefer emitting run_script(name=..., vars=...) in model actions to reduce tokens. If a script is missing, create or export it to action_scripts/recorded/, add it to the registry, then run it via python -m iphoneclaw ctl run-script (paused worker) or python -m iphoneclaw script run."

@@ -15,6 +15,7 @@ from iphoneclaw.macos.capture import ScreenCapture
 from iphoneclaw.macos.window import WindowFinder
 from iphoneclaw.agent.executor import execute_action
 from iphoneclaw.parse.action_parser import parse_predictions
+from iphoneclaw.automation.action_script import expand_special_predictions
 from iphoneclaw.supervisor.hub import SupervisorHub
 from iphoneclaw.supervisor.state import WorkerControl
 
@@ -262,6 +263,19 @@ class SupervisorHTTPServer:
                     joined = "\n".join(str(x) for x in actions if str(x).strip())
                     preds = parse_predictions("Action: " + joined)
                     preds = [p for p in preds if p.action_type != "error_env"]
+                    try:
+                        preds = expand_special_predictions(
+                            preds,
+                            registry_path=str(
+                                getattr(outer.config, "script_registry_path", "./action_scripts/registry.json")
+                            ),
+                        )
+                    except Exception as e:
+                        self._send_json(
+                            HTTPStatus.BAD_REQUEST,
+                            {"error": "run_script expand failed: %s" % str(e)},
+                        )
+                        return
                     if not preds:
                         self._send_json(HTTPStatus.BAD_REQUEST, {"error": "unparseable actions"})
                         return
@@ -273,13 +287,80 @@ class SupervisorHTTPServer:
                         shot = cap.capture()
                         wf.activate_app()
                         results = []
-                        for p in preds[:3]:
+                        # For safety: cap total actions per request.
+                        max_actions = int(getattr(outer.config, "supervisor_exec_max_actions", 50) or 50)
+                        for p in preds[:max_actions]:
                             res = execute_action(outer.config, p, shot)
                             results.append(res)
                         outer.hub.publish("supervisor_exec", {"count": len(results)})
                         if outer.recorder:
                             outer.recorder.log_event("supervisor_exec", {"actions": actions, "results": results})
                         self._send_json(HTTPStatus.OK, {"ok": True, "results": results})
+                        return
+                    except Exception as e:
+                        if outer.recorder:
+                            outer.recorder.log_event("supervisor_exec_error", {"error": str(e)})
+                        self._send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": str(e)})
+                        return
+
+                if path == "/v1/agent/script/run":
+                    if not bool(getattr(outer.config, "enable_supervisor_exec", False)):
+                        self._send_json(HTTPStatus.FORBIDDEN, {"error": "exec disabled"})
+                        return
+                    snap = outer.control.snapshot()
+                    if not bool(snap.get("paused")):
+                        self._send_json(HTTPStatus.CONFLICT, {"error": "worker must be paused to run script"})
+                        return
+
+                    name = body.get("name")
+                    script_path = body.get("path")
+                    vars_in = body.get("vars") or {}
+                    if not isinstance(vars_in, dict):
+                        self._send_json(HTTPStatus.BAD_REQUEST, {"error": "vars must be an object"})
+                        return
+
+                    if isinstance(script_path, str) and script_path.strip():
+                        raw = "run_script(path=%r, vars=%r)" % (script_path.strip(), vars_in)
+                    elif isinstance(name, str) and name.strip():
+                        raw = "run_script(name=%r, vars=%r)" % (name.strip(), vars_in)
+                    else:
+                        self._send_json(HTTPStatus.BAD_REQUEST, {"error": "missing name/path"})
+                        return
+
+                    preds = parse_predictions("Action: " + raw)
+                    preds = [p for p in preds if p.action_type != "error_env"]
+                    try:
+                        preds = expand_special_predictions(
+                            preds,
+                            registry_path=str(
+                                getattr(outer.config, "script_registry_path", "./action_scripts/registry.json")
+                            ),
+                        )
+                    except Exception as e:
+                        self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(e)})
+                        return
+                    preds = [p for p in preds if p.action_type != "error_env"]
+                    if not preds:
+                        self._send_json(HTTPStatus.BAD_REQUEST, {"error": "script produced no actions"})
+                        return
+
+                    try:
+                        wf = WindowFinder(app_name=outer.config.target_app, window_contains=outer.config.window_contains)
+                        wf.find_window()
+                        cap = ScreenCapture(wf)
+                        shot = cap.capture()
+                        wf.activate_app()
+                        max_actions = int(getattr(outer.config, "supervisor_exec_max_actions", 50) or 50)
+                        results = []
+                        for p in preds[:max_actions]:
+                            res = execute_action(outer.config, p, shot)
+                            results.append(res)
+                            if not bool(res.get("ok")):
+                                break
+                        outer.hub.publish("supervisor_exec", {"count": len(results), "script": name or script_path})
+                        if outer.recorder:
+                            outer.recorder.log_event("supervisor_script_run", {"raw": raw, "results": results})
+                        self._send_json(HTTPStatus.OK, {"ok": True, "raw": raw, "results": results})
                         return
                     except Exception as e:
                         if outer.recorder:
