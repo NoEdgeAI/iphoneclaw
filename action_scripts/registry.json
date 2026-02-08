@@ -1,5 +1,6 @@
 {
   "open_app_spotlight": "common/open_app_spotlight.txt",
-  "iphone_home_swipe_left_10_then_down": "common/iphone_home_swipe_left_10_then_down.txt"
+  "iphone_home_swipe_left_10_then_down": "common/iphone_home_swipe_left_10_then_down.txt",
+  "kill_app": "common/kill_app.txt"
 }
 

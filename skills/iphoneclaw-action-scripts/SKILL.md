@@ -35,7 +35,24 @@ Action: run_script(name='open_app_spotlight', APP='WeChat')
 
 This script does: Home -> swipe left x10 -> swipe up (Spotlight) -> type app name + Enter.
 
+### 2. Return to Home & Swipe -> use `iphone_home_swipe_left_10_then_down`
 
+When you need to go back to home screen and reset scroll position:
+```text
+Action: run_script(name='iphone_home_swipe_left_10_then_down')
+```
+
+This script does: Home -> swipe left x10 + swipe down.
+
+### 3. Killing / Dismissing the Current App -> use `kill_app`
+
+Do NOT manually compose `iphone_app_switcher()` + swipe sequences to kill an app.
+Instead, emit a single action:
+```text
+Action: run_script(name='kill_app')
+```
+
+This script does: Cmd+2 (App Switcher) -> swipe up on right side to dismiss the current app.
 
 ### General Rule
 
@@ -47,6 +64,7 @@ Before composing a multi-step action sequence, check `action_scripts/registry.js
 |---|---|---|
 | `open_app_spotlight` | `common/open_app_spotlight.txt` | Open any app via Spotlight. Var: `APP` |
 | `iphone_home_swipe_left_10_then_down` | `common/iphone_home_swipe_left_10_then_down.txt` | Home + swipe left x10 + swipe down |
+| `kill_app` | `common/kill_app.txt` | Kill/dismiss current app via App Switcher (Cmd+2 + swipe up) |
 
 ## Preferred Model Output (Low Token)
 
