@@ -10,6 +10,7 @@ MAX_PIXELS_V1_5 = 16384 * IMAGE_FACTOR * IMAGE_FACTOR  # 12,845,056
 ACTION_SPACES_V1_5 = [
     "click(start_box='<|box_start|>(x1,y1)<|box_end|>')",
     "left_double(start_box='<|box_start|>(x1,y1)<|box_end|>')",
+    "double_click(start_box='<|box_start|>(x1,y1)<|box_end|>', interval_ms=50) # Alias of left_double with configurable interval.",
     "right_single(start_box='<|box_start|>(x1,y1)<|box_end|>')",
     "drag(start_box='<|box_start|>(x1,y1)<|box_end|>', end_box='<|box_start|>(x3,y3)<|box_end|>')",
     "iphone_home() # iPhone Home Screen (Cmd+1)",
@@ -17,6 +18,7 @@ ACTION_SPACES_V1_5 = [
     "hotkey(key='ctrl c') # Split keys with a space and use lowercase. Also, do not use more than 3 keys in one hotkey action.",
     r"type(content='xxx') # Use escape characters \', \", and \n in content part to ensure we can parse the content in normal python string format. If you want to submit your input, use \n at the end of content.",
     "scroll(start_box='<|box_start|>(x1,y1)<|box_end|>', direction='down or up or right or left') # Show more information on the `direction` side.",
+    "sleep(ms=50) # Fine-grained delay for multi-action sequences (or sleep(seconds=0.05)).",
     "wait() # Sleep for 5s and take a screenshot to check for any changes.",
     "finished()",
     "call_user() # Submit the task and call the user when the task is unsolvable, or when you need the user's help.",

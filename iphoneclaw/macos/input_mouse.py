@@ -62,8 +62,8 @@ def mouse_click(x: float, y: float, button: str = "left") -> None:
     _post(up)
 
 
-def mouse_double_click(x: float, y: float) -> None:
-    """Double-click at (x, y)."""
+def mouse_double_click(x: float, y: float, *, interval_s: float = 0.02) -> None:
+    """Double-click at (x, y). interval_s controls spacing between down/up pairs."""
     point = (x, y)
     btn = Quartz.kCGMouseButtonLeft
 
@@ -87,11 +87,11 @@ def mouse_double_click(x: float, y: float) -> None:
     )
 
     _post(down1)
-    time.sleep(0.02)
+    time.sleep(max(0.0, float(interval_s)))
     _post(up1)
-    time.sleep(0.02)
+    time.sleep(max(0.0, float(interval_s)))
     _post(down2)
-    time.sleep(0.02)
+    time.sleep(max(0.0, float(interval_s)))
     _post(up2)
 
 

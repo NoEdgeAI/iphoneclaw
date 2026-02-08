@@ -184,6 +184,56 @@ def _parse_action_call(action_src: str) -> Tuple[str, Dict[str, Any]]:
     return func, kwargs2
 
 
+def _split_actions(action_str: str) -> List[str]:
+    """
+    Split a multi-action string into individual action calls.
+
+    Models vary: some separate actions by blank lines, some by newlines, some by semicolons.
+    We split on ';' or newline at top-level (not inside parentheses/quotes).
+    """
+    s = (action_str or "").strip()
+    if not s:
+        return []
+
+    out: List[str] = []
+    buf: List[str] = []
+    quote: Optional[str] = None
+    depth = 0
+
+    def flush() -> None:
+        part = "".join(buf).strip()
+        buf.clear()
+        if part:
+            out.append(part)
+
+    for ch in s:
+        if quote is not None:
+            buf.append(ch)
+            if ch == quote:
+                quote = None
+            continue
+        if ch in ("'", '"'):
+            quote = ch
+            buf.append(ch)
+            continue
+        if ch == "(":
+            depth += 1
+            buf.append(ch)
+            continue
+        if ch == ")":
+            depth = max(0, depth - 1)
+            buf.append(ch)
+            continue
+        if depth == 0 and ch in (";", "\n"):
+            flush()
+            continue
+        buf.append(ch)
+    flush()
+
+    # Also handle the historical "blank line" separator by trimming empties above.
+    return [x for x in out if x.strip()]
+
+
 def parse_predictions(text: str) -> List[PredictionParsed]:
     thought, reflection, action_str = _extract_thought_reflection_action(text)
     if not action_str:
@@ -197,8 +247,8 @@ def parse_predictions(text: str) -> List[PredictionParsed]:
             )
         ]
 
-    # Parse multiple actions separated by blank lines; keep UI-TARS behavior.
-    raw_actions = [a for a in action_str.split("\n\n") if a.strip()]
+    # Parse multiple actions; tolerate UI-TARS-desktop and provider variations.
+    raw_actions = _split_actions(action_str)
     out: List[PredictionParsed] = []
     for raw in raw_actions:
         try:
@@ -231,6 +281,22 @@ def parse_predictions(text: str) -> List[PredictionParsed]:
             ai.key = str(kwargs["hotkey"])
         if "direction" in kwargs:
             ai.direction = str(kwargs["direction"])
+        # Optional timing helpers.
+        if "seconds" in kwargs:
+            try:
+                ai.seconds = float(kwargs["seconds"])
+            except Exception:
+                ai.seconds = None
+        if "ms" in kwargs:
+            try:
+                ai.ms = int(kwargs["ms"])
+            except Exception:
+                ai.ms = None
+        if "interval_ms" in kwargs:
+            try:
+                ai.interval_ms = int(kwargs["interval_ms"])
+            except Exception:
+                ai.interval_ms = None
 
         out.append(
             PredictionParsed(

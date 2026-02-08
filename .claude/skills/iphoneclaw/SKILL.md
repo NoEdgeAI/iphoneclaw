@@ -60,6 +60,19 @@ When the worker needs to scroll on the iPhone Home Screen / App Library:
 - DO NOT use `drag(...)` for vertical scrolling. Use `scroll(direction='up'|'down', ...)`.
 - `scroll(...)` should be wheel-only (move cursor + wheel). Avoid "click to focus" before scrolling, since it may open a video/item under the cursor.
 
+## Timing-Sensitive UIs (double-click / multi-action)
+
+Some apps (e.g. Bilibili/YouTube video player) hide controls quickly. If the worker is too slow, the pause/play overlay can disappear before the second tap.
+
+Supervisor guidance to keep in mind:
+- Prefer a fast **double-click** on the center of the video to reveal controls: `double_click(start_box=...)`.
+- If needed, use a multi-action sequence in a single model response:
+  - `click(start_box=...)`
+  - `sleep(ms=50)`
+  - `click(start_box=...)`
+
+Note: historically the worker only executed the first parsed action; now it can execute 1-3 actions per response, but timing-sensitive sequences are still fragile. Be ready to inject guidance and retry.
+
 ## Pre-flight (dynamic)
 
 Read the supervisor diary and keep relevant rules in mind:

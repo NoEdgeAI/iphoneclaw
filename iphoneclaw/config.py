@@ -61,6 +61,9 @@ class Config:
     # UX: restore mouse cursor position after each action, so the operator can keep using their Mac.
     restore_cursor: bool = True
 
+    # Double-click timing: some iPhone UIs require a slightly slower double-click to show controls.
+    double_click_interval_ms: int = 50
+
     # UX: if the user moves the mouse / presses keys while the worker is running,
     # automatically pause and emit an SSE event for external supervisors.
     # Default off to avoid surprising pauses; enable explicitly when needed.
@@ -105,6 +108,9 @@ def load_config_from_env() -> Config:
     c.restore_cursor = os.getenv(
         "IPHONECLAW_RESTORE_CURSOR", "1" if c.restore_cursor else "0"
     ).strip().lower() in ("1", "true", "yes", "y", "on")
+    c.double_click_interval_ms = int(
+        os.getenv("IPHONECLAW_DOUBLE_CLICK_INTERVAL_MS", str(c.double_click_interval_ms))
+    )
     c.auto_pause_on_user_input = os.getenv(
         "IPHONECLAW_AUTO_PAUSE_ON_USER_INPUT", "1" if c.auto_pause_on_user_input else "0"
     ).strip().lower() in ("1", "true", "yes", "y", "on")

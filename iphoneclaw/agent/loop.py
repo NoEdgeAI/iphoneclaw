@@ -207,119 +207,141 @@ class Worker:
                 self.recorder.log_conversation("assistant", inv.prediction)
                 self._publish_conv("assistant", inv.prediction)
 
-                pred = inv.parsed_predictions[0]
-                act = {
-                    "action_type": pred.action_type,
-                    "raw_action": pred.raw_action,
-                    "thought": pred.thought,
-                    "inputs": pred.action_inputs.__dict__,
-                }
-                self.recorder.write_step(step, action=act)
+                preds = inv.parsed_predictions
+                # Record all actions for this step in action.json so supervisors can debug
+                # multi-action sequences (double-click, click+sleep+click, etc).
+                actions_payload: List[Dict[str, Any]] = []
+                for p in preds:
+                    actions_payload.append(
+                        {
+                            "action_type": p.action_type,
+                            "raw_action": p.raw_action,
+                            "thought": p.thought,
+                            "inputs": p.action_inputs.__dict__,
+                        }
+                    )
+                self.recorder.write_step(step, action={"actions": actions_payload})
 
-                # Repeated-action loop detection (text-only): if the model keeps outputting
-                # the exact same action, it's often stuck. Auto-pause and request supervision.
-                sig = f"{pred.action_type}|{(pred.raw_action or '').strip()}"
-                recent_sigs.append(sig)
-                if sig == last_sig:
-                    repeat_streak += 1
-                else:
-                    repeat_streak = 1
-                    last_sig = sig
-                if (
-                    getattr(self.cfg, "auto_pause_on_repeat_action", True)
-                    and repeat_streak >= int(getattr(self.cfg, "repeat_action_streak_threshold", 4))
-                    and pred.action_type not in ("finished", "call_user")
-                ):
-                    payload = {
-                        "reason": "repeat_action_streak",
-                        "streak": repeat_streak,
-                        "signature": sig,
-                        "recent": list(recent_sigs)[-8:],
-                        "step": step,
-                        "run_id": getattr(self.recorder, "run_id", ""),
-                    }
-                    try:
-                        print(
-                            "[iphoneclaw] auto-paused due to repeated identical actions "
-                            f"(streak={repeat_streak}). Use `python -m iphoneclaw ctl context --tail 5` "
-                            "and inject guidance, then `python -m iphoneclaw ctl resume`.",
-                            file=sys.stderr,
-                            flush=True,
-                        )
-                    except Exception:
-                        pass
-                    try:
-                        self.recorder.log_event("needs_supervisor", payload)
-                    except Exception:
-                        pass
-                    self.control.set_status(StatusEnum.HANG)
-                    self.control.pause()
-                    self.hub.set_status(self.control.snapshot()["status"], reason="repeat_action_streak", **payload)
-                    self.hub.publish("needs_supervisor", payload)
-                    continue
-
-                if pred.action_type == "error_env":
+                # If all parsed actions are parse errors, treat as a parse error step.
+                non_err = [p for p in preds if p.action_type != "error_env"]
+                if not non_err:
                     parse_err_streak += 1
-                    self.hub.publish("error", {"where": "parse", "streak": parse_err_streak, "raw": pred.raw_action})
+                    raw0 = preds[0].raw_action if preds else ""
+                    self.hub.publish("error", {"where": "parse", "streak": parse_err_streak, "raw": raw0})
                     if parse_err_streak >= 3:
-                        # Hang for supervision instead of burning tokens.
                         self.control.set_status(StatusEnum.HANG)
                         self.control.pause()
                         self.hub.set_status(self.control.snapshot()["status"], reason="parse_error_streak")
                         self.hub.publish("hang", {"reason": "parse_error_streak"})
-                        continue
-                else:
-                    parse_err_streak = 0
+                    continue
+                parse_err_streak = 0
 
-                # Terminal actions with hang semantics
-                if pred.action_type == "finished":
-                    if self.cfg.hang_on_finished:
+                # Execute each action sequentially (same screenshot mapping) until a terminal/hang.
+                exec_results: List[Dict[str, Any]] = []
+                for pred in non_err:
+                    # Repeated-action loop detection (text-only): if the model keeps outputting
+                    # the exact same action, it's often stuck. Auto-pause and request supervision.
+                    sig = f"{pred.action_type}|{(pred.raw_action or '').strip()}"
+                    recent_sigs.append(sig)
+                    if sig == last_sig:
+                        repeat_streak += 1
+                    else:
+                        repeat_streak = 1
+                        last_sig = sig
+                    if (
+                        getattr(self.cfg, "auto_pause_on_repeat_action", True)
+                        and repeat_streak >= int(getattr(self.cfg, "repeat_action_streak_threshold", 4))
+                        and pred.action_type not in ("finished", "call_user")
+                    ):
+                        payload = {
+                            "reason": "repeat_action_streak",
+                            "streak": repeat_streak,
+                            "signature": sig,
+                            "recent": list(recent_sigs)[-8:],
+                            "step": step,
+                            "run_id": getattr(self.recorder, "run_id", ""),
+                        }
+                        try:
+                            print(
+                                "[iphoneclaw] auto-paused due to repeated identical actions "
+                                f"(streak={repeat_streak}). Use `python -m iphoneclaw ctl context --tail 5` "
+                                "and inject guidance, then `python -m iphoneclaw ctl resume`.",
+                                file=sys.stderr,
+                                flush=True,
+                            )
+                        except Exception:
+                            pass
+                        try:
+                            self.recorder.log_event("needs_supervisor", payload)
+                        except Exception:
+                            pass
                         self.control.set_status(StatusEnum.HANG)
                         self.control.pause()
+                        self.hub.set_status(self.control.snapshot()["status"], reason="repeat_action_streak", **payload)
+                        self.hub.publish("needs_supervisor", payload)
+                        break
+
+                    # Terminal actions with hang semantics
+                    if pred.action_type == "finished":
+                        if self.cfg.hang_on_finished:
+                            self.control.set_status(StatusEnum.HANG)
+                            self.control.pause()
+                            self.hub.set_status(self.control.snapshot()["status"])
+                            self.hub.publish("hang", {"reason": "finished"})
+                            break
+                        self.control.set_status(StatusEnum.END)
                         self.hub.set_status(self.control.snapshot()["status"])
-                        self.hub.publish("hang", {"reason": "finished"})
-                        continue
-                    self.control.set_status(StatusEnum.END)
-                    self.hub.set_status(self.control.snapshot()["status"])
-                    if self._monitor:
-                        self._monitor.stop()
-                    return
+                        if self._monitor:
+                            self._monitor.stop()
+                        return
 
-                if pred.action_type == "call_user":
-                    if self.cfg.hang_on_call_user:
-                        self.control.set_status(StatusEnum.HANG)
-                        self.control.pause()
+                    if pred.action_type == "call_user":
+                        if self.cfg.hang_on_call_user:
+                            self.control.set_status(StatusEnum.HANG)
+                            self.control.pause()
+                            self.hub.set_status(self.control.snapshot()["status"])
+                            self.hub.publish("hang", {"reason": "call_user"})
+                            break
+                        self.control.set_status(StatusEnum.CALL_USER)
                         self.hub.set_status(self.control.snapshot()["status"])
-                        self.hub.publish("hang", {"reason": "call_user"})
-                        continue
-                    self.control.set_status(StatusEnum.CALL_USER)
-                    self.hub.set_status(self.control.snapshot()["status"])
-                    if self._monitor:
-                        self._monitor.stop()
-                    return
+                        if self._monitor:
+                            self._monitor.stop()
+                        return
 
-                self.wf.activate_app()
-                res = execute_action(self.cfg, pred, shot)
-                self.recorder.write_step(step, exec_result=res)
-                self.recorder.log_event("exec", res)
+                    self.wf.activate_app()
+                    res = execute_action(self.cfg, pred, shot)
+                    self.recorder.log_event("exec", res)
+                    exec_results.append(res)
 
-                if not res.get("ok"):
-                    err = str(res.get("error") or "")
-                    self.hub.publish("error", {"where": "exec", "error": err, "step": step})
+                    if not res.get("ok"):
+                        err = str(res.get("error") or "")
+                        self.hub.publish("error", {"where": "exec", "error": err, "step": step})
 
-                    # If we blocked non-ASCII typing, guide the model to use IME (pinyin) instead.
-                    if pred.action_type == "type" and ("ASCII only" in err) and (not self._sent_type_ascii_guidance):
-                        self._sent_type_ascii_guidance = True
-                        txt = (
-                            "[System Constraint]\n"
-                            "Typing constraint: `type(content=...)` must be ASCII only.\n"
-                            "If you need to input Chinese, type pinyin letters (ASCII) with the iPhone IME, "
-                            "then select the Chinese candidate by clicking the candidate bar.\n"
-                            "Do NOT output Chinese characters inside `type(content=...)`."
-                        )
-                        self.conversation.add("user", txt, injected=True)
-                        self.recorder.log_conversation("user", txt, injected=True)
-                        self._publish_conv("user", txt)
+                        # If we blocked non-ASCII typing, guide the model to use IME (pinyin) instead.
+                        if pred.action_type == "type" and ("ASCII only" in err) and (not self._sent_type_ascii_guidance):
+                            self._sent_type_ascii_guidance = True
+                            txt = (
+                                "[System Constraint]\n"
+                                "Typing constraint: `type(content=...)` must be ASCII only.\n"
+                                "If you need to input Chinese, type pinyin letters (ASCII) with the iPhone IME, "
+                                "then select the Chinese candidate by clicking the candidate bar.\n"
+                                "Do NOT output Chinese characters inside `type(content=...)`."
+                            )
+                            self.conversation.add("user", txt, injected=True)
+                            self.recorder.log_conversation("user", txt, injected=True)
+                            self._publish_conv("user", txt)
+
+                # If we were paused/hanging mid-step, skip status reset and loop delay.
+                if self.control.snapshot().get("paused") or self.control.snapshot().get("status") == StatusEnum.HANG.value:
+                    self.hub.set_status(self.control.snapshot()["status"], step=step)
+                    continue
+
+                # Persist exec results for this step (single or multi-action).
+                if exec_results:
+                    if len(exec_results) == 1:
+                        self.recorder.write_step(step, exec_result=exec_results[0])
+                    else:
+                        self.recorder.write_step(step, exec_result={"exec_results": exec_results})
 
                 # Update status each loop
                 self.control.set_status(StatusEnum.RUNNING)

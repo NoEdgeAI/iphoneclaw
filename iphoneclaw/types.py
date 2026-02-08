@@ -23,6 +23,10 @@ class ActionInputs:
     end_box: Optional[str] = None
     key: Optional[str] = None
     direction: Optional[str] = None
+    # Timing helpers for multi-action sequences.
+    seconds: Optional[float] = None
+    ms: Optional[int] = None
+    interval_ms: Optional[int] = None
     # Resolved screen coordinates (after coordinate mapping)
     start_coords: Optional[tuple[float, float]] = None
     end_coords: Optional[tuple[float, float]] = None

@@ -103,12 +103,15 @@ def execute_action(
             expected_cursor = (xy[0], xy[1])
             input_mouse.mouse_click(xy[0], xy[1], button="left")
 
-        elif action_type == "left_double":
+        elif action_type in ("left_double", "double_click", "doubleclick", "dblclick"):
             xy = _box_to_xy(ai.start_box, bounds, factor)
             if not xy:
                 raise ValueError("missing start_box")
             expected_cursor = (xy[0], xy[1])
-            input_mouse.mouse_double_click(xy[0], xy[1])
+            interval_ms = ai.interval_ms
+            if interval_ms is None:
+                interval_ms = int(getattr(cfg, "double_click_interval_ms", 50))
+            input_mouse.mouse_double_click(xy[0], xy[1], interval_s=float(interval_ms) / 1000.0)
 
         elif action_type == "right_single":
             xy = _box_to_xy(ai.start_box, bounds, factor)
@@ -230,6 +233,16 @@ def execute_action(
                 if press_enter:
                     content = content[:-1]
                 paste_text(content, press_enter=press_enter)
+
+        elif action_type == "sleep":
+            # Fine-grained delays for multi-action sequences (e.g. click + sleep + click).
+            if ai.ms is not None:
+                time.sleep(max(0.0, float(ai.ms) / 1000.0))
+            elif ai.seconds is not None:
+                time.sleep(max(0.0, float(ai.seconds)))
+            else:
+                # Default: short sleep so it remains "fine-grained".
+                time.sleep(0.05)
 
         elif action_type == "wait":
             time.sleep(5.0)
