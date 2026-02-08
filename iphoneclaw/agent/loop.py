@@ -239,8 +239,41 @@ class Worker:
                 # Execute each action sequentially (same screenshot mapping) until a terminal/hang.
                 exec_results: List[Dict[str, Any]] = []
                 for pred in non_err:
-                    # Repeated-action loop detection (text-only): if the model keeps outputting
-                    # the exact same action, it's often stuck. Auto-pause and request supervision.
+                    # Terminal actions with hang semantics
+                    if pred.action_type == "finished":
+                        if self.cfg.hang_on_finished:
+                            self.control.set_status(StatusEnum.HANG)
+                            self.control.pause()
+                            self.hub.set_status(self.control.snapshot()["status"])
+                            self.hub.publish("hang", {"reason": "finished"})
+                            break
+                        self.control.set_status(StatusEnum.END)
+                        self.hub.set_status(self.control.snapshot()["status"])
+                        if self._monitor:
+                            self._monitor.stop()
+                        return
+
+                    if pred.action_type == "call_user":
+                        if self.cfg.hang_on_call_user:
+                            self.control.set_status(StatusEnum.HANG)
+                            self.control.pause()
+                            self.hub.set_status(self.control.snapshot()["status"])
+                            self.hub.publish("hang", {"reason": "call_user"})
+                            break
+                        self.control.set_status(StatusEnum.CALL_USER)
+                        self.hub.set_status(self.control.snapshot()["status"])
+                        if self._monitor:
+                            self._monitor.stop()
+                        return
+
+                    self.wf.activate_app()
+                    res = execute_action(self.cfg, pred, shot)
+                    self.recorder.log_event("exec", res)
+                    exec_results.append(res)
+
+                    # Repeated-action loop detection: trigger only after we actually executed the action.
+                    # This avoids blocking actions that are legitimately needed multiple times (e.g. scroll
+                    # a few times to load more comments) while still pausing true dead-loops.
                     sig = f"{pred.action_type}|{(pred.raw_action or '').strip()}"
                     recent_sigs.append(sig)
                     if sig == last_sig:
@@ -281,38 +314,6 @@ class Worker:
                         self.hub.set_status(self.control.snapshot()["status"], **payload)
                         self.hub.publish("needs_supervisor", payload)
                         break
-
-                    # Terminal actions with hang semantics
-                    if pred.action_type == "finished":
-                        if self.cfg.hang_on_finished:
-                            self.control.set_status(StatusEnum.HANG)
-                            self.control.pause()
-                            self.hub.set_status(self.control.snapshot()["status"])
-                            self.hub.publish("hang", {"reason": "finished"})
-                            break
-                        self.control.set_status(StatusEnum.END)
-                        self.hub.set_status(self.control.snapshot()["status"])
-                        if self._monitor:
-                            self._monitor.stop()
-                        return
-
-                    if pred.action_type == "call_user":
-                        if self.cfg.hang_on_call_user:
-                            self.control.set_status(StatusEnum.HANG)
-                            self.control.pause()
-                            self.hub.set_status(self.control.snapshot()["status"])
-                            self.hub.publish("hang", {"reason": "call_user"})
-                            break
-                        self.control.set_status(StatusEnum.CALL_USER)
-                        self.hub.set_status(self.control.snapshot()["status"])
-                        if self._monitor:
-                            self._monitor.stop()
-                        return
-
-                    self.wf.activate_app()
-                    res = execute_action(self.cfg, pred, shot)
-                    self.recorder.log_event("exec", res)
-                    exec_results.append(res)
 
                     if not res.get("ok"):
                         err = str(res.get("error") or "")
