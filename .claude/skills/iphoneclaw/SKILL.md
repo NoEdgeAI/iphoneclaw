@@ -8,7 +8,7 @@ description: >
 context: fork
 agent: general-purpose
 disable-model-invocation: true
-allowed-tools: Bash(python -m iphoneclaw *), Bash(sleep *), Bash(ps *), Bash(kill -15 *), Read, Write
+allowed-tools: Bash(python -m iphoneclaw *), Bash(sleep *), Bash(ps *), Bash(kill -15 *), Bash(grep *), Read, Write
 argument-hint: "[instruction for the iPhone agent]"
 ---
 
@@ -30,12 +30,12 @@ Optional community sharing repo: https://github.com/NoEdgeAI/awesome-iphoneclaw-
 Only submit a PR to that repo if the user explicitly agrees.
 
 Before starting a task:
-- Read `WORKER_DIARY.md` and extract any relevant rules for this instruction.
+- Use `grep` to query `WORKER_DIARY.md` and extract any relevant rules for this instruction.
 - Keep those rules in mind when injecting guidance.
 
-After the task finishes (or is stopped):
-- Append 1 short diary entry if you learned something new.
-- Keep it actionable and text-only (no secrets, no screenshots).
+After the task finishes (or is stopped): REQUIRED
+- Write a short reflection and append exactly **one** new `DIARY|...` line to `WORKER_DIARY.md` (append-only).
+- Keep it actionable and text-only (no secrets, no screenshots). One line only.
 - If the new entry seems generally useful, ask the user:
   "Do you want me to submit a PR to https://github.com/NoEdgeAI/awesome-iphoneclaw-diary with this diary entry?"
   Only proceed if they say yes.
@@ -63,7 +63,12 @@ When the worker needs to scroll on the iPhone Home Screen / App Library:
 ## Pre-flight (dynamic)
 
 Read the supervisor diary and keep relevant rules in mind:
-!`python - <<'PY'\nfrom pathlib import Path\np=Path('WORKER_DIARY.md')\nprint(p.read_text(encoding='utf-8') if p.exists() else '(no WORKER_DIARY.md yet)')\nPY`
+
+1) Show the latest generic lessons (tail of `DIARY|` lines):
+!`grep -n "^DIARY|" WORKER_DIARY.md 2>/dev/null | tail -n 30 || true`
+
+2) Grep for task keywords from `$ARGUMENTS` (pick 2-4 keywords, e.g. app name / feature):
+!`grep -niE "bilibili|douyin|wechat|settings|wifi|scroll|type|spotlight|drag" WORKER_DIARY.md 2>/dev/null | tail -n 30 || true`
 
 Permission check result:
 !`python -m iphoneclaw doctor 2>&1 || true`
@@ -194,9 +199,18 @@ Return a **concise summary** to the user:
 - Keep injected guidance concise and actionable (1-2 sentences).
 - Do NOT exceed 20 polling iterations. Stop and report partial progress.
 
-### Diary Update (append-only)
+### Diary Update (append-only, REQUIRED)
 
-If you observed a new failure mode or a new best practice, append a short entry to `WORKER_DIARY.md`.
+Always append exactly one new diary entry line in the grep-friendly format:
+
+`DIARY|ts=YYYY-MM-DDTHH:MM:SS±HH:MM|app=<AppName>|task=<ShortTask>|reflection=<OneLine>|tags=<k1,k2>|run=<runs/...>`
+
+Guidelines:
+- `app`: the primary app involved (e.g. `Bilibili`, `Settings`, `iPhone Home`).
+- `task`: 6-12 words max.
+- `reflection`: 1-2 sentences, one line only. Use `; ` instead of newlines. Avoid `|` in values.
+- `tags`: comma keywords for grep (e.g. `scroll,wheel,no-drag,ime,ascii-only,spotlight-avoid`).
+- `run`: optional, if you have it.
 
 Process:
 1. Read current `WORKER_DIARY.md` (if it exists).

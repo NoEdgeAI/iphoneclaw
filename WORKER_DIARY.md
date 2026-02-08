@@ -9,6 +9,28 @@ Rules:
 - Keep entries short and actionable.
 - Prefer: symptom -> cause -> fix -> how to prevent.
 
+## Log Format (grep-friendly, append-only)
+
+All new diary entries MUST be a single line starting with `DIARY|` so supervisors can retrieve relevant lessons using `grep`.
+
+Required fields:
+- `app`
+- `task`
+- `reflection`
+
+Recommended fields:
+- `ts` (RFC3339 local time)
+- `tags` (comma-separated keywords)
+- `run` (optional run id like `runs/20260208_070745`)
+
+Template:
+`DIARY|ts=YYYY-MM-DDTHH:MM:SS±HH:MM|app=<AppName>|task=<ShortTask>|reflection=<OneLine>|tags=<k1,k2>|run=<runs/...>`
+
+Encoding rules:
+- One line only. Replace newlines with `; `.
+- Avoid `|` inside values. If needed, replace with `/`.
+- No screenshots/base64, no secrets.
+
 ## Common Lessons
 
 - Scrolling:
@@ -23,7 +45,7 @@ Rules:
 - iPhone gestures:
   - Long-press-like drags can trigger icon rearrange; keep swipe gestures fast (no long hold).
 
-## Entry Template
+## Legacy Template (deprecated)
 
 Date: YYYY-MM-DD
 Task: <short>
@@ -31,4 +53,3 @@ Symptom: <what went wrong>
 Cause: <why>
 Fix: <what to do next time>
 Prevention: <prompt/guideline/config change>
-
