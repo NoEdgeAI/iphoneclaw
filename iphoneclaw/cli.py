@@ -268,6 +268,28 @@ def cmd_ctl(args: argparse.Namespace) -> int:
         result = req("POST", "/v1/agent/stop")
     elif args.action == "inject":
         result = req("POST", "/v1/agent/inject", {"text": args.text, "pause": args.pause, "resume": args.resume})
+    elif args.action == "clear_context":
+        result = req(
+            "POST",
+            "/v1/agent/context/clear",
+            {
+                "mode": "all",
+                "keep_last_system": bool(args.keep_last_system),
+                "pause": bool(args.pause),
+                "resume": bool(args.resume),
+            },
+        )
+    elif args.action == "trim_context":
+        result = req(
+            "POST",
+            "/v1/agent/context/clear",
+            {
+                "mode": "tail",
+                "dropRounds": int(args.drop_rounds),
+                "pause": bool(args.pause),
+                "resume": bool(args.resume),
+            },
+        )
     elif args.action == "context":
         result = req("GET", "/v1/agent/context?tailRounds=%d" % int(args.tail))
     else:
@@ -495,6 +517,19 @@ def build_parser() -> argparse.ArgumentParser:
     sp_ctx = p_ctl_sub.add_parser("context")
     sp_ctx.add_argument("--tail", default=5, type=int)
     sp_ctx.set_defaults(action="context")
+
+    sp_clr = p_ctl_sub.add_parser("clear-context", help="Clear ALL worker conversation context (keeps last system by default).")
+    sp_clr.add_argument("--keep-last-system", action="store_true", default=True)
+    sp_clr.add_argument("--drop-system", action="store_false", dest="keep_last_system")
+    sp_clr.add_argument("--pause", action="store_true", help="Pause before clearing.")
+    sp_clr.add_argument("--resume", action="store_true", help="Resume after clearing.")
+    sp_clr.set_defaults(action="clear_context")
+
+    sp_trim = p_ctl_sub.add_parser("trim-context", help="Drop the most recent N assistant rounds from conversation context.")
+    sp_trim.add_argument("--drop-rounds", default=1, type=int, help="Number of assistant rounds to drop.")
+    sp_trim.add_argument("--pause", action="store_true", help="Pause before trimming.")
+    sp_trim.add_argument("--resume", action="store_true", help="Resume after trimming.")
+    sp_trim.set_defaults(action="trim_context")
     p_ctl.set_defaults(func=cmd_ctl)
 
     p_diary = sub.add_parser("diary", help="Supervisor diary helpers (grep-friendly).")

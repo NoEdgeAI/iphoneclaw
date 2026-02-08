@@ -74,3 +74,55 @@ class ConversationStore:
             }
             for it in sliced
         ]
+
+    def clear(self, *, keep_last_system: bool = True) -> int:
+        """
+        Clear conversation history.
+
+        If keep_last_system is True, preserve the most recent system message so the worker
+        still has its base rules when the next step builds messages.
+        Returns the number of items removed.
+        """
+        with self._lock:
+            before = len(self._items)
+            if not self._items:
+                return 0
+            if not keep_last_system:
+                self._items.clear()
+                return before
+            # Keep the last system message if present; otherwise clear all.
+            last_sys = None
+            for it in reversed(self._items):
+                if it.role == "system":
+                    last_sys = it
+                    break
+            self._items = [last_sys] if last_sys is not None else []
+            return before - len(self._items)
+
+    def trim_tail_rounds(self, drop_rounds: int) -> int:
+        """
+        Drop the most recent N assistant rounds (and the user message right before each, if present).
+        Returns the number of items removed.
+        """
+        n = int(drop_rounds)
+        if n <= 0:
+            return 0
+        with self._lock:
+            before = len(self._items)
+            if before == 0:
+                return 0
+
+            assistant_dropped = 0
+            # Walk backwards and remove messages belonging to the last N assistant rounds.
+            i = len(self._items) - 1
+            while i >= 0 and assistant_dropped < n:
+                if self._items[i].role == "assistant":
+                    # Remove this assistant message.
+                    del self._items[i]
+                    # Also remove the triggering user message immediately before, if it exists.
+                    if i - 1 >= 0 and self._items[i - 1].role == "user":
+                        del self._items[i - 1]
+                        i -= 1
+                    assistant_dropped += 1
+                i -= 1
+            return before - len(self._items)

@@ -31,6 +31,14 @@ Encoding rules:
 - Avoid `|` inside values. If needed, replace with `/`.
 - No screenshots/base64, no secrets.
 
+## Example Entries (sanitized)
+
+These are intentionally generic examples (no personal data, no screenshots).
+
+DIARY|ts=2026-02-08T00:00:00+00:00|app=VideoPlayer|task=Pause video quickly|reflection=Player controls auto-hide; use double_click at center or click;sleep(ms=50);click sequence; avoid slow reasoning between taps|tags=video,double-click,timing
+DIARY|ts=2026-02-08T00:00:10+00:00|app=Settings|task=Toggle a single switch safely|reflection=Avoid extra navigation after goal reached; confirm switch state before finished(); if looping, trim context and restate goal|tags=settings,switch,finish-too-early,context-clear
+DIARY|ts=2026-02-08T00:00:20+00:00|app=iPhone Home|task=Scroll without opening apps|reflection=Do not click-to-focus before wheel scroll; keep cursor near safe area (above dock) to avoid accidental opens|tags=home,scroll,wheel,no-focus-click
+
 ## Common Lessons
 
 - Scrolling:
@@ -53,3 +61,6 @@ Symptom: <what went wrong>
 Cause: <why>
 Fix: <what to do next time>
 Prevention: <prompt/guideline/config change>
+
+DIARY|ts=2026-02-08T11:30:00+08:00|app=YouTube|task=Search latest Linux video and read comments|reflection=Worker kept calling finished() prematurely after opening video without reading description/comments; double_click() for pausing video worked well; YouTube comment section needs to be clicked/tapped to expand before scrolling; worker crashed (max loop) before completing comment reading; supervisor needs to be more aggressive about preventing early finished() calls; also YouTube Shorts trap - avoid clicking short-form videos as navigation out is difficult|tags=youtube,linux,pause,double-click,comments,finished-too-early,shorts-trap,max-loop
+DIARY|ts=2026-02-08T12:00:00+08:00|app=YouTube|task=YouTube video pause and exit navigation|reflection=YouTube video player: double-click CENTER of video to pause/play; double-click TOP-LEFT corner to exit/go back; single click on video shows controls briefly then hides; worker must use left_double at center (500,230) to pause, left_double at top-left (80,130) to exit; also worker calls finished() way too early - must explicitly list ALL required info in Thought before finishing|tags=youtube,double-click,pause,exit,back-button,center-click,top-left-exit

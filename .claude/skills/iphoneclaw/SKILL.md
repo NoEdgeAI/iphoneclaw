@@ -168,6 +168,25 @@ Stop and report the error. Do NOT retry automatically.
 **E. `status: hang` with `reason: parse_error_streak`** — Vision model produced
 3+ unparseable outputs. Stop the worker and report.
 
+**F. Worker keeps outputting `finished()` too early / gets stuck in a bad context** —
+You can clear or trim the worker conversation context (text-only) to "unstick" it.
+This is useful when the model starts repeating the same wrong plan because of accumulated context.
+
+Clear ALL context (keeps last system prompt by default):
+```bash
+python -m iphoneclaw ctl clear-context --pause --resume
+```
+
+Trim the most recent N assistant rounds (e.g. drop last 2 rounds):
+```bash
+python -m iphoneclaw ctl trim-context --drop-rounds 2 --pause --resume
+```
+
+After clearing/trimming, inject a short restated goal and resume (if needed):
+```bash
+python -m iphoneclaw ctl inject --text "Restated goal: ... Constraints: ... Next: ..." --resume
+```
+
 ### If Stuck: Peek One Screenshot (Optional)
 
 Normally you supervise **text-only**. However, if the worker is clearly stuck (dead loop, repeating the same wrong action 3+ times, or cannot make progress after multiple injections), you may read the **most recent screenshot** from `runs/` to guide a better injection. This is often faster than guessing from text alone.

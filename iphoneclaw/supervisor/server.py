@@ -187,6 +187,33 @@ class SupervisorHTTPServer:
                     self._send_json(HTTPStatus.OK, {"ok": True, "status": outer.control.snapshot()})
                     return
 
+                if path == "/v1/agent/context/clear":
+                    # Optional safety gates.
+                    if bool(body.get("pause")):
+                        outer.control.pause()
+                    mode = str(body.get("mode") or "all").strip().lower()
+                    removed = 0
+                    if mode in ("all", "clear"):
+                        keep_sys = bool(body.get("keep_last_system", True))
+                        removed = int(outer.conversation_store.clear(keep_last_system=keep_sys))
+                        outer.hub.publish("context_cleared", {"mode": "all", "removed": removed, "keep_last_system": keep_sys})
+                    elif mode in ("tail", "trim", "drop"):
+                        drop_rounds = int(body.get("dropRounds") or body.get("tailRounds") or 1)
+                        removed = int(outer.conversation_store.trim_tail_rounds(drop_rounds))
+                        outer.hub.publish("context_cleared", {"mode": "tail", "dropRounds": drop_rounds, "removed": removed})
+                    else:
+                        self._send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid mode", "mode": mode})
+                        return
+
+                    if bool(body.get("resume")):
+                        outer.control.resume()
+                    outer.hub.set_status(outer.control.snapshot()["status"])
+                    self._send_json(
+                        HTTPStatus.OK,
+                        {"ok": True, "status": outer.control.snapshot(), "removed": removed},
+                    )
+                    return
+
                 self._send_json(HTTPStatus.NOT_FOUND, {"error": "not found"})
 
             def log_message(self, fmt: str, *args: Any) -> None:
