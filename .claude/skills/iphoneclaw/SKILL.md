@@ -26,6 +26,9 @@ You **never** see screenshots. You only see the worker's `Thought:` / `Action:` 
 
 This repo contains a supervisor-written diary at `WORKER_DIARY.md`.
 
+Optional community sharing repo: https://github.com/NoEdgeAI/awesome-iphoneclaw-diary
+Only submit a PR to that repo if the user explicitly agrees.
+
 Before starting a task:
 - Read `WORKER_DIARY.md` and extract any relevant rules for this instruction.
 - Keep those rules in mind when injecting guidance.
@@ -33,6 +36,9 @@ Before starting a task:
 After the task finishes (or is stopped):
 - Append 1 short diary entry if you learned something new.
 - Keep it actionable and text-only (no secrets, no screenshots).
+- If the new entry seems generally useful, ask the user:
+  "Do you want me to submit a PR to https://github.com/NoEdgeAI/awesome-iphoneclaw-diary with this diary entry?"
+  Only proceed if they say yes.
 
 ## Typing Constraint (Chinese IME)
 
