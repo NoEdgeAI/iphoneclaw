@@ -64,11 +64,8 @@ When the worker needs to scroll on the iPhone Home Screen / App Library:
 
 Read the supervisor diary and keep relevant rules in mind:
 
-1) Show the latest generic lessons (tail of `DIARY|` lines):
-!`grep -n "^DIARY|" WORKER_DIARY.md 2>/dev/null | tail -n 30 || true`
-
-2) Grep for task keywords from `$ARGUMENTS` (pick 2-4 keywords, e.g. app name / feature):
-!`grep -niE "bilibili|douyin|wechat|settings|wifi|scroll|type|spotlight|drag" WORKER_DIARY.md 2>/dev/null | tail -n 30 || true`
+Auto-grep `WORKER_DIARY.md` using keywords extracted from the current task text (`$ARGUMENTS`):
+!`python -m iphoneclaw diary grep --text "$ARGUMENTS" --tail 30`
 
 Permission check result:
 !`python -m iphoneclaw doctor 2>&1 || true`

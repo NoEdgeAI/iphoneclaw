@@ -66,6 +66,11 @@ class Config:
     # Default off to avoid surprising pauses; enable explicitly when needed.
     auto_pause_on_user_input: bool = False
 
+    # Safety: detect repeated identical actions (often a dead-loop) and auto-pause
+    # to request supervisor intervention via SSE (`needs_supervisor`).
+    auto_pause_on_repeat_action: bool = True
+    repeat_action_streak_threshold: int = 4
+
     # Input constraint: disallow non-ASCII typing. For Chinese, type pinyin (ASCII)
     # and then select IME candidates via clicks.
     type_ascii_only: bool = True
@@ -103,6 +108,12 @@ def load_config_from_env() -> Config:
     c.auto_pause_on_user_input = os.getenv(
         "IPHONECLAW_AUTO_PAUSE_ON_USER_INPUT", "1" if c.auto_pause_on_user_input else "0"
     ).strip().lower() in ("1", "true", "yes", "y", "on")
+    c.auto_pause_on_repeat_action = os.getenv(
+        "IPHONECLAW_AUTO_PAUSE_ON_REPEAT_ACTION", "1" if c.auto_pause_on_repeat_action else "0"
+    ).strip().lower() in ("1", "true", "yes", "y", "on")
+    c.repeat_action_streak_threshold = int(
+        os.getenv("IPHONECLAW_REPEAT_ACTION_STREAK_THRESHOLD", str(c.repeat_action_streak_threshold))
+    )
     c.type_ascii_only = os.getenv(
         "IPHONECLAW_TYPE_ASCII_ONLY", "1" if c.type_ascii_only else "0"
     ).strip().lower() in ("1", "true", "yes", "y", "on")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import time
+from collections import deque
 from typing import Any, Dict, List, Optional
 
 from iphoneclaw.agent.conversation import ConversationStore
@@ -129,6 +130,9 @@ class Worker:
 
         step = 0
         parse_err_streak = 0
+        recent_sigs: "deque[str]" = deque(maxlen=16)
+        repeat_streak = 0
+        last_sig = ""
         while True:
             try:
                 if self.control.snapshot()["stopped"]:
@@ -211,6 +215,48 @@ class Worker:
                     "inputs": pred.action_inputs.__dict__,
                 }
                 self.recorder.write_step(step, action=act)
+
+                # Repeated-action loop detection (text-only): if the model keeps outputting
+                # the exact same action, it's often stuck. Auto-pause and request supervision.
+                sig = f"{pred.action_type}|{(pred.raw_action or '').strip()}"
+                recent_sigs.append(sig)
+                if sig == last_sig:
+                    repeat_streak += 1
+                else:
+                    repeat_streak = 1
+                    last_sig = sig
+                if (
+                    getattr(self.cfg, "auto_pause_on_repeat_action", True)
+                    and repeat_streak >= int(getattr(self.cfg, "repeat_action_streak_threshold", 4))
+                    and pred.action_type not in ("finished", "call_user")
+                ):
+                    payload = {
+                        "reason": "repeat_action_streak",
+                        "streak": repeat_streak,
+                        "signature": sig,
+                        "recent": list(recent_sigs)[-8:],
+                        "step": step,
+                        "run_id": getattr(self.recorder, "run_id", ""),
+                    }
+                    try:
+                        print(
+                            "[iphoneclaw] auto-paused due to repeated identical actions "
+                            f"(streak={repeat_streak}). Use `python -m iphoneclaw ctl context --tail 5` "
+                            "and inject guidance, then `python -m iphoneclaw ctl resume`.",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                    except Exception:
+                        pass
+                    try:
+                        self.recorder.log_event("needs_supervisor", payload)
+                    except Exception:
+                        pass
+                    self.control.set_status(StatusEnum.HANG)
+                    self.control.pause()
+                    self.hub.set_status(self.control.snapshot()["status"], reason="repeat_action_streak", **payload)
+                    self.hub.publish("needs_supervisor", payload)
+                    continue
 
                 if pred.action_type == "error_env":
                     parse_err_streak += 1

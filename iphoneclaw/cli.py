@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import base64
 import os
+import re
+import subprocess
 import time
 from typing import List, Optional
 
@@ -274,6 +276,112 @@ def cmd_ctl(args: argparse.Namespace) -> int:
     return 0
 
 
+def _extract_keywords(text: str, *, limit: int = 6) -> List[str]:
+    # ASCII-ish tokenization so it's stable across shells/encodings.
+    t = (text or "").lower()
+    toks = re.split(r"[^a-z0-9]+", t)
+    stop = {
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "to",
+        "of",
+        "in",
+        "on",
+        "for",
+        "with",
+        "at",
+        "from",
+        "into",
+        "then",
+        "open",
+        "click",
+        "tap",
+        "scroll",
+        "type",
+        "iphone",
+        "ios",
+        "app",
+        "agent",
+        "worker",
+    }
+    out: List[str] = []
+    seen = set()
+    for w in toks:
+        if len(w) < 3:
+            continue
+        if w in stop:
+            continue
+        if w in seen:
+            continue
+        seen.add(w)
+        out.append(w)
+        if len(out) >= limit:
+            break
+    return out
+
+
+def cmd_diary_grep(args: argparse.Namespace) -> int:
+    """
+    Grep WORKER_DIARY.md using auto-extracted keywords from task text.
+    This exists so Claude Code skills can stay within `python -m iphoneclaw *`.
+    """
+    path = os.path.abspath(args.path or "WORKER_DIARY.md")
+    if not os.path.exists(path):
+        print("(no WORKER_DIARY.md found at %s)" % path)
+        return 0
+
+    tail = int(args.tail)
+    text = str(args.text or "")
+    kws = _extract_keywords(text, limit=int(args.keywords))
+    # Always include a few high-signal global tags.
+    baseline = ["scroll", "wheel", "drag", "spotlight", "ime", "ascii", "type", "home"]
+    # Build a single ERE pattern for grep -E.
+    pat_terms = [re.escape(x) for x in (kws + baseline) if x]
+    pat = "|".join(pat_terms) if pat_terms else "^DIARY\\|"
+
+    # 1) Print the most recent DIARY lines (for quick orientation).
+    try:
+        raw = subprocess.run(
+            ["grep", "-n", "^DIARY|", path],
+            check=False,
+            capture_output=True,
+            text=True,
+        ).stdout
+        lines = [ln for ln in raw.splitlines() if ln.strip()]
+        if lines:
+            print("== diary tail (DIARY|) ==")
+            for ln in lines[-tail:]:
+                print(ln)
+    except Exception:
+        pass
+
+    # 2) Keyword grep.
+    try:
+        out = subprocess.run(
+            ["grep", "-niE", pat, path],
+            check=False,
+            capture_output=True,
+            text=True,
+        ).stdout
+        hits = [ln for ln in out.splitlines() if ln.strip()]
+        if hits:
+            print("\n== diary hits (pattern: %s) ==" % pat)
+            for ln in hits[-tail:]:
+                print(ln)
+        else:
+            print("\n== diary hits ==")
+            print("(none)")
+    except Exception as e:
+        print("\n== diary grep error ==")
+        print(str(e))
+        return 2
+
+    return 0
+
+
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -388,6 +496,15 @@ def build_parser() -> argparse.ArgumentParser:
     sp_ctx.add_argument("--tail", default=5, type=int)
     sp_ctx.set_defaults(action="context")
     p_ctl.set_defaults(func=cmd_ctl)
+
+    p_diary = sub.add_parser("diary", help="Supervisor diary helpers (grep-friendly).")
+    p_diary_sub = p_diary.add_subparsers(dest="action", required=True)
+    p_dg = p_diary_sub.add_parser("grep", help="Grep WORKER_DIARY.md using auto keywords from task text.")
+    p_dg.add_argument("--text", required=True, help="Task/instruction text (e.g. $ARGUMENTS).")
+    p_dg.add_argument("--path", default="WORKER_DIARY.md", help="Diary path (default: ./WORKER_DIARY.md).")
+    p_dg.add_argument("--tail", default=30, type=int, help="Max lines to print per section.")
+    p_dg.add_argument("--keywords", default=6, type=int, help="Max auto-extracted keywords.")
+    p_dg.set_defaults(func=cmd_diary_grep)
 
     return p
 
