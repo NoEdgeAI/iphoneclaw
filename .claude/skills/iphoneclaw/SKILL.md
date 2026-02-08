@@ -147,6 +147,24 @@ Stop and report the error. Do NOT retry automatically.
 **E. `status: hang` with `reason: parse_error_streak`** — Vision model produced
 3+ unparseable outputs. Stop the worker and report.
 
+### If Stuck: Peek One Screenshot (Optional)
+
+Normally you supervise **text-only**. However, if the worker is clearly stuck (dead loop, repeating the same wrong action 3+ times, or cannot make progress after multiple injections), you may read the **most recent screenshot** from `runs/` to guide a better injection. This is often faster than guessing from text alone.
+
+How to locate the latest screenshot file:
+
+```bash
+LATEST_RUN="$(ls -td runs/* 2>/dev/null | head -n 1)"
+LATEST_STEP="$(ls -td "$LATEST_RUN"/steps/* 2>/dev/null | head -n 1)"
+echo "$LATEST_STEP/screenshot.jpg"
+```
+
+Then use the `Read` tool to open that `screenshot.jpg` and inspect it.
+
+Rules:
+- Only read **the latest 1 screenshot** when necessary.
+- Do NOT paste screenshots/base64 into your final answer; use it only to craft a better `ctl inject` guidance.
+
 ## Phase 3 — Report
 
 After stopping the worker (or it ended), do a final context fetch:
