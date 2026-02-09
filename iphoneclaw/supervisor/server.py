@@ -40,6 +40,11 @@ class SupervisorHTTPServer:
         self.recorder = recorder
         self._httpd: Optional[ThreadingHTTPServer] = None
         self._thread: Optional[threading.Thread] = None
+        # Reuse a single capture pipeline for supervisor endpoints so crop offset
+        # can stay warm/cached across requests.
+        self._capture_lock = threading.Lock()
+        self._capture_wf: Optional[WindowFinder] = None
+        self._capture: Optional[ScreenCapture] = None
 
     def start(self) -> None:
         host = self.config.supervisor_host
@@ -69,6 +74,35 @@ class SupervisorHTTPServer:
 
             def _send_json(self, status: int, obj: Any) -> None:
                 self._send(status, _json_bytes(obj))
+
+            def _capture_target_window(self):
+                """
+                Capture using the same cropped-bounds pipeline as worker/CLI, and
+                best-effort bring iPhone Mirroring to front first so bounds/offset
+                are aligned with the active interactive window.
+                """
+                with outer._capture_lock:
+                    if outer._capture_wf is None or outer._capture is None:
+                        outer._capture_wf = WindowFinder(
+                            app_name=outer.config.target_app,
+                            window_contains=outer.config.window_contains,
+                        )
+                        outer._capture = ScreenCapture(outer._capture_wf)
+                    wf = outer._capture_wf
+                    cap = outer._capture
+
+                    wf.find_window()
+                    try:
+                        wf.activate_app()
+                        time.sleep(0.2)
+                    except Exception:
+                        pass
+                    try:
+                        wf.refresh()
+                    except Exception:
+                        pass
+                    shot = cap.capture()
+                    return shot
 
             def do_GET(self) -> None:
                 if not self._auth_ok():
@@ -134,28 +168,60 @@ class SupervisorHTTPServer:
                         min_confidence = 1.0
                     if max_items < 0:
                         max_items = 0
+                    lang_items = []
+                    for x in (qs.get("lang") or []):
+                        for p in str(x).split(","):
+                            s = p.strip()
+                            if s:
+                                lang_items.append(s)
+                    for x in (qs.get("langs") or []):
+                        for p in str(x).split(","):
+                            s = p.strip()
+                            if s:
+                                lang_items.append(s)
+                    # stable de-dup
+                    langs = []
+                    seen = set()
+                    for s in lang_items:
+                        if s in seen:
+                            continue
+                        seen.add(s)
+                        langs.append(s)
+                    auto_detect_language = True
+                    raw_ad = str((qs.get("autoDetectLanguage") or ["1"])[0]).strip().lower()
+                    if raw_ad in ("0", "false", "no", "off"):
+                        auto_detect_language = False
 
                     try:
                         from iphoneclaw.macos.ocr_vision import recognize_screenshot_text
 
-                        wf = WindowFinder(app_name=outer.config.target_app, window_contains=outer.config.window_contains)
-                        wf.find_window()
-                        cap = ScreenCapture(wf)
-                        shot = cap.capture()
+                        shot = self._capture_target_window()
                         payload = recognize_screenshot_text(
                             shot,
                             coord_factor=int(getattr(outer.config, "coord_factor", 1000)),
                             min_confidence=float(min_confidence),
                             max_items=(int(max_items) if max_items > 0 else None),
+                            languages=langs,
+                            auto_detect_language=auto_detect_language,
                         )
                         outer.hub.publish(
                             "supervisor_ocr",
-                            {"count": int(payload.get("count") or 0), "min_confidence": min_confidence},
+                            {
+                                "count": int(payload.get("count") or 0),
+                                "min_confidence": min_confidence,
+                                "languages": langs,
+                                "auto_detect_language": auto_detect_language,
+                            },
                         )
                         if outer.recorder:
                             outer.recorder.log_event(
                                 "supervisor_ocr",
-                                {"count": int(payload.get("count") or 0), "min_confidence": min_confidence},
+                                {
+                                    "count": int(payload.get("count") or 0),
+                                    "min_confidence": min_confidence,
+                                    "languages": langs,
+                                    "auto_detect_language": auto_detect_language,
+                                },
                             )
                         self._send_json(HTTPStatus.OK, {"ok": True, **payload})
                         return
@@ -329,11 +395,7 @@ class SupervisorHTTPServer:
                         return
 
                     try:
-                        wf = WindowFinder(app_name=outer.config.target_app, window_contains=outer.config.window_contains)
-                        wf.find_window()
-                        cap = ScreenCapture(wf)
-                        shot = cap.capture()
-                        wf.activate_app()
+                        shot = self._capture_target_window()
                         results = []
                         # For safety: cap total actions per request.
                         max_actions = int(getattr(outer.config, "supervisor_exec_max_actions", 50) or 50)
@@ -393,11 +455,7 @@ class SupervisorHTTPServer:
                         return
 
                     try:
-                        wf = WindowFinder(app_name=outer.config.target_app, window_contains=outer.config.window_contains)
-                        wf.find_window()
-                        cap = ScreenCapture(wf)
-                        shot = cap.capture()
-                        wf.activate_app()
+                        shot = self._capture_target_window()
                         max_actions = int(getattr(outer.config, "supervisor_exec_max_actions", 50) or 50)
                         results = []
                         for p in preds[:max_actions]:

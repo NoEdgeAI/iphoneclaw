@@ -233,6 +233,12 @@ python -m iphoneclaw script run --file action_scripts/common/open_app_spotlight.
 
 ```bash
 python -m iphoneclaw ocr --app "iPhone Mirroring" --min-confidence 0.2
+
+# 显式指定中文 + 英文识别语言
+python -m iphoneclaw ocr --app "iPhone Mirroring" --lang zh-Hans --lang zh-Hant --lang en-US
+
+# 保存调试产物（原图 + 画框图 + OCR JSON）
+python -m iphoneclaw ocr --app "iPhone Mirroring" --min-confidence 0.2 --debug-draw --debug-dir ./ocr_debug
 ```
 
 ### 录制或导出脚本
@@ -312,12 +318,13 @@ python -m iphoneclaw ctl run-script --name open_app_spotlight --var APP=bilibili
 
 # 用 Apple Vision 做当前 iPhone 画面 OCR（文本 + 文本框）
 python -m iphoneclaw ctl ocr --min-confidence 0.2
+python -m iphoneclaw ctl ocr --lang zh-Hans --lang zh-Hant --lang en-US
 ```
 
 SSE 事件流: `GET /v1/agent/events`
 
 OCR API: `GET /v1/agent/ocr`  
-可选 query 参数：`minConfidence`（0..1）、`maxItems`（>0）
+可选 query 参数：`minConfidence`（0..1）、`maxItems`（>0）、`lang`（可重复）、`autoDetectLanguage`（0/1）
 
 ## macOS 打字（AppleScript）
 

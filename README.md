@@ -287,6 +287,12 @@ python -m iphoneclaw script run --file action_scripts/common/open_app_spotlight.
 
 ```bash
 python -m iphoneclaw ocr --app "iPhone Mirroring" --min-confidence 0.2
+
+# Explicit Chinese + English language set
+python -m iphoneclaw ocr --app "iPhone Mirroring" --lang zh-Hans --lang zh-Hant --lang en-US
+
+# Save debug artifacts (raw screenshot + overlay with OCR boxes + OCR JSON)
+python -m iphoneclaw ocr --app "iPhone Mirroring" --min-confidence 0.2 --debug-draw --debug-dir ./ocr_debug
 ```
 
 ### Record Or Export A Script
@@ -366,12 +372,13 @@ python -m iphoneclaw ctl run-script --name open_app_spotlight --var APP=bilibili
 
 # OCR current iPhone screen with Apple Vision (text + boxes)
 python -m iphoneclaw ctl ocr --min-confidence 0.2
+python -m iphoneclaw ctl ocr --lang zh-Hans --lang zh-Hant --lang en-US
 ```
 
 SSE event stream: `GET /v1/agent/events`
 
 OCR API: `GET /v1/agent/ocr`  
-Optional query params: `minConfidence` (0..1), `maxItems` (>0)
+Optional query params: `minConfidence` (0..1), `maxItems` (>0), `lang` (repeatable), `autoDetectLanguage` (0/1)
 
 ## Typing on macOS (AppleScript)
 

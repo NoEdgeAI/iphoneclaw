@@ -162,14 +162,28 @@ def cmd_ocr(args: argparse.Namespace) -> int:
     shot = cap.capture()
 
     try:
-        from iphoneclaw.macos.ocr_vision import recognize_screenshot_text
+        from iphoneclaw.macos.ocr_vision import recognize_screenshot_text, save_ocr_debug_visualization
 
         payload = recognize_screenshot_text(
             shot,
             coord_factor=int(args.coord_factor),
             min_confidence=float(args.min_confidence),
             max_items=(int(args.max_items) if int(args.max_items) > 0 else None),
+            languages=_parse_ocr_langs(getattr(args, "lang", [])),
+            auto_detect_language=not bool(getattr(args, "no_auto_detect_language", False)),
         )
+
+        if bool(args.debug_draw):
+            try:
+                dbg = save_ocr_debug_visualization(
+                    shot,
+                    payload,
+                    out_dir=str(args.debug_dir or "./ocr_debug"),
+                    prefix=str(args.debug_prefix or "ocr"),
+                )
+                payload["debug"] = dbg
+            except Exception as e:
+                payload["debug_error"] = str(e)
     except Exception as e:
         print("ocr error: %s" % str(e))
         return 2
@@ -294,6 +308,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 def cmd_ctl(args: argparse.Namespace) -> int:
     import json
+    import urllib.parse
     import urllib.request
     import urllib.error
 
@@ -384,6 +399,11 @@ def cmd_ctl(args: argparse.Namespace) -> int:
             q.append("minConfidence=%s" % float(args.min_confidence))
         if args.max_items is not None and int(args.max_items) > 0:
             q.append("maxItems=%d" % int(args.max_items))
+        langs = _parse_ocr_langs(getattr(args, "lang", []))
+        for lg in langs:
+            q.append("lang=%s" % urllib.parse.quote(lg, safe="-_"))
+        if bool(getattr(args, "no_auto_detect_language", False)):
+            q.append("autoDetectLanguage=0")
         path = "/v1/agent/ocr"
         if q:
             path += "?" + "&".join(q)
@@ -525,6 +545,19 @@ def _parse_vars(kvs: List[str]) -> dict:
     return out
 
 
+def _parse_ocr_langs(items: List[str]) -> List[str]:
+    out: List[str] = []
+    seen = set()
+    for raw in items or []:
+        for part in str(raw).split(","):
+            s = part.strip()
+            if not s or s in seen:
+                continue
+            seen.add(s)
+            out.append(s)
+    return out
+
+
 def _frontmost_app_name() -> str:
     try:
         from AppKit import NSWorkspace
@@ -658,7 +691,11 @@ def cmd_script_record_user(args: argparse.Namespace) -> int:
     wf = WindowFinder(app_name=args.app, window_contains=args.window_contains)
     wf.find_window()
     wf.activate_app()
-    b = wf.bounds
+    # Align recording coordinate system with worker/ocr screenshots (auto-cropped bounds).
+    wf.refresh()
+    cap = ScreenCapture(wf)
+    shot = cap.capture()
+    b = shot.window_bounds
 
     seconds = max(0.0, float(args.seconds or 0.0))
     recorder = LiveUserActionRecorder(
@@ -685,6 +722,11 @@ def cmd_script_record_user(args: argparse.Namespace) -> int:
             ("auto after %.1fs" % seconds) if seconds > 0 else "Ctrl-C",
         )
     )
+    if shot.crop_rect_px:
+        print(
+            "using cropped bounds for recording: crop_rect_px=%s (raw %dx%d)"
+            % (shot.crop_rect_px, shot.raw_image_width, shot.raw_image_height)
+        )
 
     try:
         actions = recorder.record(seconds=seconds)
@@ -808,6 +850,32 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         help="Model coordinate factor for model_box output (default from config; usually 1000).",
     )
+    p_ocr.add_argument(
+        "--lang",
+        action="append",
+        default=[],
+        help="OCR language tag (repeatable), e.g. --lang zh-Hans --lang en-US. Supports comma-separated values too.",
+    )
+    p_ocr.add_argument(
+        "--no-auto-detect-language",
+        action="store_true",
+        help="Disable Vision automatic language detection.",
+    )
+    p_ocr.add_argument(
+        "--debug-draw",
+        action="store_true",
+        help="Draw OCR text boxes on screenshot and save debug artifacts.",
+    )
+    p_ocr.add_argument(
+        "--debug-dir",
+        default="./ocr_debug",
+        help="Output directory for OCR debug artifacts (used with --debug-draw).",
+    )
+    p_ocr.add_argument(
+        "--debug-prefix",
+        default="ocr",
+        help="Filename prefix for OCR debug artifacts (used with --debug-draw).",
+    )
     p_ocr.set_defaults(func=cmd_ocr)
 
     p_win = sub.add_parser("windows", help="Debug: list visible windows from CGWindowList.")
@@ -917,6 +985,17 @@ def build_parser() -> argparse.ArgumentParser:
     sp_ocr = p_ctl_sub.add_parser("ocr", help="Run Apple Vision OCR on current screen via supervisor API.")
     sp_ocr.add_argument("--min-confidence", default=0.0, type=float, help="Keep text items with confidence >= value (0..1).")
     sp_ocr.add_argument("--max-items", default=0, type=int, help="Limit returned OCR items (0 means no limit).")
+    sp_ocr.add_argument(
+        "--lang",
+        action="append",
+        default=[],
+        help="OCR language tag (repeatable), e.g. --lang zh-Hans --lang en-US. Supports comma-separated values too.",
+    )
+    sp_ocr.add_argument(
+        "--no-auto-detect-language",
+        action="store_true",
+        help="Disable Vision automatic language detection.",
+    )
     sp_ocr.set_defaults(action="ocr")
 
     sp_ex = p_ctl_sub.add_parser("exec", help="Execute actions directly (requires exec enabled, worker paused).")

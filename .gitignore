@@ -12,3 +12,4 @@ dist/
 .env
 .claude/
 llm_plan_docs
+ocr_debug

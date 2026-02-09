@@ -25,7 +25,7 @@ def _is_near_white(r: int, g: int, b: int, *, thr: int) -> bool:
 def _auto_crop_white_border_px_cv2(
     bgr_img,
     *,
-    edge_white_frac_threshold: float = 0.995,
+    edge_white_frac_threshold: float = 0.985,
     white_min: int = 242,
     white_max_delta: int = 20,
     margin_px: int = 6,
@@ -51,30 +51,104 @@ def _auto_crop_white_border_px_cv2(
     if h <= 0 or w <= 0:
         return None
 
-    mx = img.max(axis=2)
-    mn = img.min(axis=2)
-    # "Near-white" means all channels are very bright and close to each other.
-    white = (mx >= white_min) & (mn >= white_min) & ((mx - mn) <= white_max_delta)
+    def _scan_edges(white_mask, thr: float) -> Optional[Tuple[int, int, int, int]]:
+        row_white = white_mask.mean(axis=1)
+        col_white = white_mask.mean(axis=0)
 
-    row_white = white.mean(axis=1)
-    col_white = white.mean(axis=0)
+        # Smooth edge ratios to tolerate sparse non-white noise on white borders.
+        k = 5
+        if h >= k:
+            row_white = np.convolve(row_white, np.ones(k, dtype=np.float32) / float(k), mode="same")
+        if w >= k:
+            col_white = np.convolve(col_white, np.ones(k, dtype=np.float32) / float(k), mode="same")
 
-    thr = float(edge_white_frac_threshold)
+        y0 = 0
+        while y0 < h and float(row_white[y0]) >= thr:
+            y0 += 1
+        y1 = h - 1
+        while y1 > y0 and float(row_white[y1]) >= thr:
+            y1 -= 1
+        x0 = 0
+        while x0 < w and float(col_white[x0]) >= thr:
+            x0 += 1
+        x1 = w - 1
+        while x1 > x0 and float(col_white[x1]) >= thr:
+            x1 -= 1
 
-    y0 = 0
-    while y0 < h and float(row_white[y0]) >= thr:
-        y0 += 1
-    y1 = h - 1
-    while y1 > y0 and float(row_white[y1]) >= thr:
-        y1 -= 1
+        if x1 <= x0 or y1 <= y0:
+            return None
+        return (int(x0), int(y0), int(x1), int(y1))
+
+    # Multi-pass tuning: when the first pass fails to trim due anti-aliased noise,
+    # try a slightly more permissive near-white definition and edge threshold.
+    attempts = [
+        (int(white_min), int(white_max_delta), float(edge_white_frac_threshold)),
+        (max(220, int(white_min) - 8), int(white_max_delta) + 6, max(0.95, float(edge_white_frac_threshold) - 0.02)),
+        (max(200, int(white_min) - 16), int(white_max_delta) + 12, max(0.92, float(edge_white_frac_threshold) - 0.04)),
+    ]
     x0 = 0
-    while x0 < w and float(col_white[x0]) >= thr:
-        x0 += 1
+    y0 = 0
     x1 = w - 1
-    while x1 > x0 and float(col_white[x1]) >= thr:
-        x1 -= 1
+    y1 = h - 1
+    found = False
+    for wm, wd, thr in attempts:
+        mx = img.max(axis=2)
+        mn = img.min(axis=2)
+        white = (mx >= wm) & (mn >= wm) & ((mx - mn) <= wd)
+        rect = _scan_edges(white, thr)
+        if rect is None:
+            continue
+        tx0, ty0, tx1, ty1 = rect
+        x0, y0, x1, y1 = tx0, ty0, tx1, ty1
+        found = True
+        # Stop once we trimmed anything.
+        if not (x0 == 0 and y0 == 0 and x1 == (w - 1) and y1 == (h - 1)):
+            break
 
-    if x1 <= x0 or y1 <= y0:
+    # Fallback for "mostly white content" pages:
+    # Edge scan may return full-frame when interior is also very white.
+    # In that case, estimate white background from corners and keep pixels that differ.
+    if found and (x0 == 0 and y0 == 0 and x1 == (w - 1) and y1 == (h - 1)):
+        k = max(8, min(20, min(h, w) // 20))
+        corners = np.concatenate(
+            [
+                img[:k, :k].reshape(-1, 3),
+                img[:k, w - k :].reshape(-1, 3),
+                img[h - k :, :k].reshape(-1, 3),
+                img[h - k :, w - k :].reshape(-1, 3),
+            ],
+            axis=0,
+        )
+        corner_mean = corners.mean(axis=0)
+
+        # Only apply this heuristic when corners are truly near-white.
+        if float(corner_mean.min()) >= 245.0:
+            d = np.linalg.norm(
+                img.astype(np.float32) - corner_mean.astype(np.float32),
+                axis=2,
+            )
+            for td in (8.0, 10.0, 12.0, 15.0, 18.0, 22.0):
+                m = d > td
+                ys, xs = np.where(m)
+                if xs.size <= 0 or ys.size <= 0:
+                    continue
+                tx0 = int(xs.min())
+                tx1 = int(xs.max())
+                ty0 = int(ys.min())
+                ty1 = int(ys.max())
+                cw2 = (tx1 - tx0) + 1
+                ch2 = (ty1 - ty0) + 1
+                # Reliability guards.
+                if cw2 < int(w * 0.35) or ch2 < int(h * 0.35):
+                    continue
+                # Require actual trim to happen.
+                if tx0 <= 0 and ty0 <= 0 and tx1 >= (w - 1) and ty1 >= (h - 1):
+                    continue
+                x0, y0, x1, y1 = tx0, ty0, tx1, ty1
+                found = True
+                break
+
+    if not found:
         return None
 
     x0 = max(0, int(x0) - margin_px)
@@ -95,7 +169,7 @@ def _auto_crop_white_border_px_cv2(
 def _auto_crop_white_border_px(
     image: "Quartz.CGImageRef",
     *,
-    white_threshold: int = 250,
+    white_threshold: int = 242,
     margin_px: int = 6,
 ) -> Optional[Tuple[int, int, int, int]]:
     """
@@ -138,29 +212,105 @@ def _auto_crop_white_border_px(
 
         if bytes_per_pixel >= 4:
             if alpha_first:
-                ro, go, bo = 1, 2, 3
+                ro, go, bo, ao = 1, 2, 3, 0
             else:
-                ro, go, bo = 0, 1, 2
+                ro, go, bo, ao = 0, 1, 2, 3
         else:
-            ro, go, bo = 0, 1, 2
+            ro, go, bo, ao = 0, 1, 2, -1
 
         # Prefer cv2/numpy edge-scan crop when available.
+        # Pipeline:
+        #   1) alpha-only trim (true transparent border)
+        #   2) near-white trim (opaque white border)
+        # Important: we still need near-white trim because many white borders are
+        # opaque pixels (alpha=255), not transparent.
         try:
+            import cv2  # type: ignore
             import numpy as np  # type: ignore
 
             # Create a (h, w, c) view for pixel payload (ignore padding at row end).
             raw = np.frombuffer(data, dtype=np.uint8, count=h * bpr).reshape((h, bpr))
             pix = raw[:, : w * bytes_per_pixel].reshape((h, w, bytes_per_pixel))
+
+            # Step 1: alpha-only crop (if alpha channel exists). This trims true
+            # transparent borders and is usually exact.
+            if bytes_per_pixel >= 4 and ao >= 0:
+                alpha = pix[:, :, ao].astype(np.uint8)
+                non_transparent = alpha >= 8  # tolerate anti-aliased semi-transparency
+                ys, xs = np.where(non_transparent)
+                if xs.size > 0 and ys.size > 0:
+                    ax0 = int(xs.min())
+                    ax1 = int(xs.max())
+                    ay0 = int(ys.min())
+                    ay1 = int(ys.max())
+                    aw = (ax1 - ax0) + 1
+                    ah = (ay1 - ay0) + 1
+                    trim_l = ax0
+                    trim_t = ay0
+                    trim_r = max(0, w - (ax0 + aw))
+                    trim_b = max(0, h - (ay0 + ah))
+                    # Guard against accidental tiny bbox from sparse alpha noise.
+                    if (
+                        aw >= int(w * 0.35)
+                        and ah >= int(h * 0.35)
+                        and max(trim_l, trim_t, trim_r, trim_b) >= 2
+                    ):
+                        ax0 = max(0, ax0 - margin_px)
+                        ay0 = max(0, ay0 - margin_px)
+                        ax1 = min(w - 1, ax1 + margin_px)
+                        ay1 = min(h - 1, ay1 + margin_px)
+                        return (
+                            int(ax0),
+                            int(ay0),
+                            int((ax1 - ax0) + 1),
+                            int((ay1 - ay0) + 1),
+                        )
+
+            # Step 2: robust near-white trim using JPEG round-trip to remove
+            # alpha/format ambiguity. This mirrors what downstream consumers see
+            # in shot.base64 (JPEG).
+            # Robust path: JPEG round-trip from CGImage to remove alpha/format ambiguity.
+            jpeg_data = bitmap.representationUsingType_properties_(
+                NSJPEGFileType,
+                {NSImageCompressionFactor: 1.0},
+            )
+            if jpeg_data is not None:
+                enc = np.frombuffer(bytes(jpeg_data), dtype=np.uint8)
+                bgr = cv2.imdecode(enc, cv2.IMREAD_COLOR)
+                if bgr is not None and hasattr(bgr, "shape"):
+                    rect = _auto_crop_white_border_px_cv2(bgr, margin_px=margin_px)
+                    if rect is not None:
+                        rx, ry, rw, rh = rect
+                        trim_l = int(rx)
+                        trim_t = int(ry)
+                        trim_r = int(max(0, w - (rx + rw)))
+                        trim_b = int(max(0, h - (ry + rh)))
+                        if max(trim_l, trim_t, trim_r, trim_b) >= 2:
+                            return rect
+
             if bytes_per_pixel >= 4:
-                if alpha_first:
-                    bgr = pix[:, :, (3, 2, 1)]
-                else:
-                    bgr = pix[:, :, (2, 1, 0)]
+                # Composite onto white background using alpha.
+                a = pix[:, :, ao].astype(np.float32) / 255.0
+                b = pix[:, :, bo].astype(np.float32)
+                g = pix[:, :, go].astype(np.float32)
+                r = pix[:, :, ro].astype(np.float32)
+                b = (b * a) + (255.0 * (1.0 - a))
+                g = (g * a) + (255.0 * (1.0 - a))
+                r = (r * a) + (255.0 * (1.0 - a))
+                bgr = np.dstack((b, g, r)).astype(np.uint8)
             else:
                 bgr = pix[:, :, (2, 1, 0)]
             rect = _auto_crop_white_border_px_cv2(bgr, margin_px=margin_px)
             if rect is not None:
-                return rect
+                rx, ry, rw, rh = rect
+                # Guard: cv2 path can occasionally return "full-frame" on very white UIs.
+                # When trim is tiny, let the sampled fallback try once more.
+                trim_l = int(rx)
+                trim_t = int(ry)
+                trim_r = int(max(0, w - (rx + rw)))
+                trim_b = int(max(0, h - (ry + rh)))
+                if max(trim_l, trim_t, trim_r, trim_b) >= 2:
+                    return rect
         except Exception:
             pass
 
@@ -269,7 +419,19 @@ class ScreenCapture:
             self._crop_rect_px = None
             self._last_raw_size = (raw_w, raw_h)
         if self._crop_rect_px is None:
-            self._crop_rect_px = _auto_crop_white_border_px(image)
+            candidate = _auto_crop_white_border_px(image)
+            if candidate is not None:
+                cx, cy, cw, ch = candidate
+                trim_l = int(cx)
+                trim_t = int(cy)
+                trim_r = int(max(0, raw_w - (cx + cw)))
+                trim_b = int(max(0, raw_h - (cy + ch)))
+                # Do not cache "full-frame" / near-full-frame results:
+                # those are usually transient detection misses.
+                if max(trim_l, trim_t, trim_r, trim_b) >= 2:
+                    self._crop_rect_px = candidate
+                else:
+                    self._crop_rect_px = None
         if self._crop_rect_px is not None:
             crop_rect_px = self._crop_rect_px
             cx, cy, cw, ch = crop_rect_px
