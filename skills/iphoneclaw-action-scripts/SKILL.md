@@ -99,6 +99,9 @@ This hits supervisor endpoint `POST /v1/agent/script/run`.
 
 1. Create or record the script.
 ```bash
+# real user behavior recording (recommended)
+python -m iphoneclaw script record-user --app "iPhone Mirroring" --out action_scripts/recorded/my_flow.txt
+
 # quick record from stdin (Ctrl-D to finish)
 python -m iphoneclaw script record --out action_scripts/recorded/my_flow.txt
 ```

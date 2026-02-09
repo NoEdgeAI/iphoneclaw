@@ -16,6 +16,7 @@ from iphoneclaw.supervisor.state import WorkerControl
 from iphoneclaw.macos.capture import ScreenCapture
 from iphoneclaw.macos.permissions import run_doctor
 from iphoneclaw.macos.window import WindowFinder
+from iphoneclaw.macos.window import expand_app_aliases
 from iphoneclaw.macos.window import list_on_screen_windows
 from iphoneclaw.agent.conversation import ConversationStore
 from iphoneclaw.agent.loop import Worker
@@ -460,6 +461,29 @@ def _parse_vars(kvs: List[str]) -> dict:
     return out
 
 
+def _frontmost_app_name() -> str:
+    try:
+        from AppKit import NSWorkspace
+
+        app = NSWorkspace.sharedWorkspace().frontmostApplication()
+        return str((app.localizedName() if app else "") or "")
+    except Exception:
+        return ""
+
+
+def _is_target_frontmost(app_name: str) -> bool:
+    front = _frontmost_app_name().strip().lower()
+    if not front:
+        return False
+    for alias in expand_app_aliases(app_name):
+        a = str(alias or "").strip().lower()
+        if not a:
+            continue
+        if front == a or (front in a) or (a in front):
+            return True
+    return False
+
+
 def cmd_script_run(args: argparse.Namespace) -> int:
     cfg = load_config_from_env()
     cfg.target_app = args.app
@@ -482,9 +506,26 @@ def cmd_script_run(args: argparse.Namespace) -> int:
 
     wf = WindowFinder(app_name=args.app, window_contains=args.window_contains)
     wf.find_window()
+    if _is_target_frontmost(args.app):
+        print("target app already frontmost: %r" % args.app)
+    else:
+        for _ in range(4):
+            wf.activate_app()
+            time.sleep(0.25)
+            if _is_target_frontmost(args.app):
+                break
+        if _is_target_frontmost(args.app):
+            print("activated target app to frontmost: %r" % args.app)
+        else:
+            print(
+                "warning: failed to bring target app %r to front. frontmost now=%r"
+                % (args.app, _frontmost_app_name())
+            )
+
+    # Refresh once after optional activation to avoid stale bounds.
+    wf.refresh()
     cap = ScreenCapture(wf)
     shot = cap.capture()
-    wf.activate_app()
 
     results = []
     # Allow longer scripts; caller can keep them small, but CLI shouldn't hard-cap at 3.
@@ -507,7 +548,11 @@ def cmd_script_record(args: argparse.Namespace) -> int:
     out_path = os.path.abspath(args.out)
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
 
-    print("recording to %s (Ctrl-D to finish)" % out_path)
+    print(
+        "recording to %s (Ctrl-D to finish)\n"
+        "NOTE: this records action lines from stdin only; it does NOT capture live mouse/keyboard gestures."
+        % out_path
+    )
     lines: List[str] = []
     try:
         while True:
@@ -520,6 +565,73 @@ def cmd_script_record(args: argparse.Namespace) -> int:
         for ln in lines:
             f.write(ln.rstrip("\n") + "\n")
     print("wrote %d lines" % len(lines))
+    if not lines:
+        print(
+            "hint: for executed action export, use `python -m iphoneclaw script from-run --run-dir runs/<id> --out ...`.\n"
+            "for real user gesture recording, use `python -m iphoneclaw script record-user --out ...`."
+        )
+    return 0
+
+
+def cmd_script_record_user(args: argparse.Namespace) -> int:
+    """
+    Record real user mouse/keyboard gestures in target window into action script lines.
+    """
+    from iphoneclaw.automation.user_record import LiveUserActionRecorder
+
+    out_path = os.path.abspath(args.out)
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+    wf = WindowFinder(app_name=args.app, window_contains=args.window_contains)
+    wf.find_window()
+    wf.activate_app()
+    b = wf.bounds
+
+    seconds = max(0.0, float(args.seconds or 0.0))
+    recorder = LiveUserActionRecorder(
+        bounds=b,
+        coord_factor=int(args.coord_factor),
+        min_sleep_ms=int(args.min_sleep_ms),
+        max_sleep_ms=int(args.max_sleep_ms),
+        drag_threshold_px=float(args.drag_threshold_px),
+        include_keyboard=not bool(args.no_keyboard),
+    )
+
+    print(
+        "recording real user actions to %s\n"
+        "target window: app=%r bounds=(%.1f, %.1f, %.1f, %.1f)\n"
+        "stop: %s\n"
+        "notes: only events inside target window are captured; cmd+1/cmd+2 become iphone_home()/iphone_app_switcher()."
+        % (
+            out_path,
+            args.app,
+            b.x,
+            b.y,
+            b.width,
+            b.height,
+            ("auto after %.1fs" % seconds) if seconds > 0 else "Ctrl-C",
+        )
+    )
+
+    try:
+        actions = recorder.record(seconds=seconds)
+    except RuntimeError as e:
+        print("record-user error: %s" % str(e))
+        return 2
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(
+            "# Recorded by: python -m iphoneclaw script record-user --app %s\n"
+            % str(args.app)
+        )
+        for a in actions:
+            f.write(a.rstrip("\n") + "\n")
+
+    print("wrote %s (%d actions)" % (out_path, len(actions)))
+    if not actions:
+        print(
+            "hint: grant Accessibility permission to your terminal/python and make sure you interact inside the target window."
+        )
     return 0
 
 
@@ -732,7 +844,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_dg.add_argument("--keywords", default=6, type=int, help="Max auto-extracted keywords.")
     p_dg.set_defaults(func=cmd_diary_grep)
 
-    p_script = sub.add_parser("script", help="Action script helpers (parse/run/record/replay).")
+    p_script = sub.add_parser("script", help="Action script helpers (run/record/record-user/from-run).")
     p_script_sub = p_script.add_subparsers(dest="action", required=True)
 
     sp_run = p_script_sub.add_parser("run", help="Run an action script (.txt) against the target window.")
@@ -743,9 +855,55 @@ def build_parser() -> argparse.ArgumentParser:
     sp_run.add_argument("--keep-going", action="store_true", help="Continue even if an action fails.")
     sp_run.set_defaults(func=cmd_script_run)
 
-    sp_rec = p_script_sub.add_parser("record", help="Record a script by reading lines from stdin.")
+    sp_rec = p_script_sub.add_parser(
+        "record",
+        help="Record a script by reading action lines from stdin (not live mouse/keyboard capture).",
+    )
     sp_rec.add_argument("--out", required=True, help="Output script path.")
     sp_rec.set_defaults(func=cmd_script_record)
+
+    sp_rec_user = p_script_sub.add_parser(
+        "record-user",
+        help="Record real user mouse/keyboard gestures inside target window.",
+    )
+    _add_common_args(sp_rec_user)
+    sp_rec_user.add_argument("--out", required=True, help="Output script path.")
+    sp_rec_user.add_argument(
+        "--seconds",
+        default=0.0,
+        type=float,
+        help="Auto-stop after N seconds (0 means run until Ctrl-C).",
+    )
+    sp_rec_user.add_argument(
+        "--coord-factor",
+        default=Config().coord_factor,
+        type=int,
+        help="Model coordinate factor (default from config; usually 1000).",
+    )
+    sp_rec_user.add_argument(
+        "--min-sleep-ms",
+        default=180,
+        type=int,
+        help="Insert sleep(ms=...) only when action gap >= this threshold.",
+    )
+    sp_rec_user.add_argument(
+        "--max-sleep-ms",
+        default=2000,
+        type=int,
+        help="Cap auto-inserted sleep(ms=...) to this value.",
+    )
+    sp_rec_user.add_argument(
+        "--drag-threshold-px",
+        default=18.0,
+        type=float,
+        help="Pointer move threshold to treat left mouse as drag instead of click.",
+    )
+    sp_rec_user.add_argument(
+        "--no-keyboard",
+        action="store_true",
+        help="Do not record hotkeys (mouse/scroll only).",
+    )
+    sp_rec_user.set_defaults(func=cmd_script_record_user)
 
     sp_fr = p_script_sub.add_parser("from-run", help="Export executed actions from runs/<id>/events.jsonl.")
     sp_fr.add_argument("--run-dir", required=True, help="Run directory (e.g. runs/20260208_154607).")

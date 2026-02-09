@@ -201,27 +201,69 @@ class WindowFinder:
 
     def activate_app(self) -> None:
         """Bring the target app to the foreground."""
+        aliases = [str(a or "") for a in expand_app_aliases(self.app_name)]
+        aliases_l = [a.strip().lower() for a in aliases if a.strip()]
+
         try:
             from AppKit import NSWorkspace
 
             workspace = NSWorkspace.sharedWorkspace()
             apps = workspace.runningApplications()
+            activate_opts = 0
+            try:
+                from AppKit import NSApplicationActivateAllWindows
+                from AppKit import NSApplicationActivateIgnoringOtherApps
+
+                activate_opts = int(NSApplicationActivateAllWindows) | int(
+                    NSApplicationActivateIgnoringOtherApps
+                )
+            except Exception:
+                activate_opts = 0
+
             for ra in apps:
-                if ra.localizedName() == self.app_name:
-                    ra.activateWithOptions_(0)
+                name = str((ra.localizedName() or "")).strip().lower()
+                if not name:
+                    continue
+                matched = any((name == a) or (name in a) or (a in name) for a in aliases_l)
+                if not matched and _looks_like_iphone_mirroring(self.app_name):
+                    matched = ("iphone" in name) and any(t in name for t in _MIRROR_STRONG_TOKENS)
+                if not matched:
+                    continue
+                try:
+                    ra.activateWithOptions_(activate_opts)
+                    time.sleep(0.08)
                     return
-            # Fuzzy match (localized name may differ slightly).
-            want = self.app_name.lower()
-            for ra in apps:
-                name = (ra.localizedName() or "").lower()
-                if want in name or name in want:
-                    ra.activateWithOptions_(0)
-                    return
+                except Exception:
+                    continue
         except Exception:
-            # Fallback to open -a
-            subprocess.run(
-                ["open", "-a", self.app_name], capture_output=True
-            )
+            pass
+
+        # Fallback 1: AppleScript activate (sometimes stronger than NSWorkspace activation).
+        for alias in aliases:
+            if not alias:
+                continue
+            try:
+                subprocess.run(
+                    ["osascript", "-e", 'tell application "%s" to activate' % alias],
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                time.sleep(0.08)
+                return
+            except Exception:
+                continue
+
+        # Fallback 2: open -a
+        for alias in aliases:
+            if not alias:
+                continue
+            try:
+                subprocess.run(["open", "-a", alias], check=False, capture_output=True, text=True)
+                time.sleep(0.08)
+                return
+            except Exception:
+                continue
 
     def find_window(self) -> dict:
         """Find the target window. Returns the raw CGWindowList info dict."""

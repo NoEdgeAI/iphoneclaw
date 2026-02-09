@@ -1,0 +1,9 @@
+# Recorded by: python -m iphoneclaw script record-user --app iPhone Mirroring
+drag(start_box='(523 659)', end_box='(824 657)')
+sleep(ms=1289)
+drag(start_box='(819 734)', end_box='(487 712)')
+sleep(ms=968)
+click(start_box='(858 914)')
+sleep(ms=1539)
+click(start_box='(614 979)')
+sleep(ms=993)

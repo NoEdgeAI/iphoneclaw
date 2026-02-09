@@ -12,6 +12,39 @@ Full demo video: [assets/iphoneclaw.mp4](assets/iphoneclaw.mp4)
 
 Official site: https://iphoneclaw.com
 
+## Feature Cards
+
+<table>
+  <tr>
+    <td width="33%">
+      <b>Real User Recording</b><br/>
+      Capture real mouse/scroll/hotkey behavior into replayable scripts with <code>script record-user</code>.
+    </td>
+    <td width="33%">
+      <b>One-Command Replay</b><br/>
+      Re-run recorded flows with <code>script run</code> for fast iPhone automation delivery.
+    </td>
+    <td width="33%">
+      <b>Deterministic Script Library</b><br/>
+      Register reusable flows in <code>action_scripts/registry.json</code> and invoke with <code>run_script(name=...)</code>.
+    </td>
+  </tr>
+  <tr>
+    <td width="33%">
+      <b>Claude Code / Codex Skill</b><br/>
+      Plug into Claude Code/Codex workflows and invoke deterministic actions via <code>run_script(name=...)</code>.
+    </td>
+    <td width="33%">
+      <b>L0 Memoization Speedup</b><br/>
+      Skip repeated VLM calls on known screens and replay proven actions instantly.
+    </td>
+    <td width="33%">
+      <b>Automation Use Cases</b><br/>
+      Practical repetitive tasks like red packet flows and Ant Forest energy collection style routines.
+    </td>
+  </tr>
+</table>
+
 macOS-only Python CLI worker that controls the **iPhone Mirroring / iPhone镜像** window using a VLM (Vision Language Model) agent loop:
 
 1. Capture window screenshot (Quartz CGWindowList)
@@ -28,6 +61,27 @@ This is designed to plug into orchestrators like **Claude Code** / **Codex** as 
 It can also **improve over time**: supervisors can record “lessons learned” in `WORKER_DIARY.md`, and consult it before starting new tasks.
 
 Community diary repo (opt-in PRs): https://github.com/NoEdgeAI/awesome-iphoneclaw-diary
+
+## What You Can Automate (User Recording + Replay)
+
+iphoneclaw now supports **real user behavior recording** and **script replay** for iPhone automation:
+
+- Record real gestures in iPhone Mirroring window:
+  - `python -m iphoneclaw script record-user --app "iPhone Mirroring" --out action_scripts/recorded/my_live_flow.txt`
+- Replay recorded script:
+  - `python -m iphoneclaw script run --app "iPhone Mirroring" --file action_scripts/recorded/my_live_flow.txt`
+- Register reusable scripts in `action_scripts/registry.json`, then let agent run them via `run_script(name=...)`.
+
+Typical use cases:
+
+- Daily repetitive flows (open app, navigation, check-in, fixed click sequences)
+- Holiday or campaign interactions (for example, red packet flows / 抢红包-like operations)
+- Green app routine tasks (for example, Ant Forest energy collection / 蚂蚁森林能量收取-like operations)
+
+Notes:
+
+- Keep scripts focused and deterministic for better replay stability.
+- Please follow each app/platform terms and local regulations when automating interactions.
 
 ## Prerequisites
 
@@ -209,7 +263,7 @@ iphoneclaw windows         List visible windows (debug)
 iphoneclaw run             Run the agent loop + supervisor API
 iphoneclaw serve           Start supervisor API only (no worker)
 iphoneclaw ctl             Control a running worker via supervisor
-iphoneclaw script          Action scripts (parse/run/record/export)
+iphoneclaw script          Action scripts (parse/run/record/record-user/export)
 ```
 
 ## Action Scripts (L1)
@@ -231,12 +285,23 @@ python -m iphoneclaw script run --file action_scripts/common/open_app_spotlight.
 ### Record Or Export A Script
 
 ```bash
-# Record from stdin (Ctrl-D to finish)
+# Record real user behavior (mouse/scroll/hotkey) inside target window
+# Stop by Ctrl-C, or pass --seconds N for timed recording
+python -m iphoneclaw script record-user --app "iPhone Mirroring" --out action_scripts/recorded/my_live_flow.txt
+
+# Record action lines from stdin (Ctrl-D to finish; this is not live mouse/keyboard capture)
 python -m iphoneclaw script record --out action_scripts/recorded/my_flow.txt
 
 # Export executed actions from a previous run (runs/<id>/events.jsonl)
 python -m iphoneclaw script from-run --run-dir runs/<run_id> --out action_scripts/recorded/<run_id>.txt
 ```
+
+`record-user` mapping highlights:
+- left click -> `click(...)`
+- left drag -> `drag(...)`
+- right click -> `right_single(...)`
+- wheel scroll -> `scroll(...)`
+- hotkeys -> `hotkey(key='...')` (`cmd 1`/`cmd 2` become `iphone_home()`/`iphone_app_switcher()`)
 
 ### Register A Script (Short Name)
 

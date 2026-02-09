@@ -11,3 +11,4 @@ dist/
 .venv/
 .env
 .claude/
+llm_plan_docs

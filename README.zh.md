@@ -12,6 +12,39 @@
 
 官网: https://iphoneclaw.com
 
+## 卖点卡片
+
+<table>
+  <tr>
+    <td width="33%">
+      <b>真实用户录制</b><br/>
+      用 <code>script record-user</code> 把真实鼠标/滚动/热键行为录成可重放脚本。
+    </td>
+    <td width="33%">
+      <b>一键脚本重放</b><br/>
+      用 <code>script run</code> 直接回放录制流程，快速落地 iPhone 自动化。
+    </td>
+    <td width="33%">
+      <b>确定性脚本库</b><br/>
+      在 <code>action_scripts/registry.json</code> 注册流程，agent 用 <code>run_script(name=...)</code> 低 token 调用。
+    </td>
+  </tr>
+  <tr>
+    <td width="33%">
+      <b>Claude Code / Codex Skill</b><br/>
+      可直接接入 Claude Code/Codex 工作流，通过 <code>run_script(name=...)</code> 调用确定性动作。
+    </td>
+    <td width="33%">
+      <b>L0 记忆缓存提速</b><br/>
+      已见过的屏幕可直接重放已验证动作，减少重复 VLM 调用。
+    </td>
+    <td width="33%">
+      <b>自动化业务场景</b><br/>
+      可覆盖抢红包类流程、蚂蚁森林能量收取类流程等高频重复任务。
+    </td>
+  </tr>
+</table>
+
 `iphoneclaw` 是一个 **macOS-only** 的 Python CLI Worker：通过 **iPhone 镜像 / iPhone Mirroring** 窗口，让 VLM（Vision Language Model）以 UI-TARS 风格的 `Thought:` / `Action:` 循环来操控你的 iPhone。
 
 核心流程:
@@ -28,6 +61,27 @@
 同时支持“持续学习”：supervisor 可以把经验教训记录在 `WORKER_DIARY.md`，并在每次新任务开始前先查一查，让 worker 越用越熟练。
 
 社区日记仓库（需用户同意后再提交 PR）：https://github.com/NoEdgeAI/awesome-iphoneclaw-diary
+
+## 可实现的自动化能力（真实录制 + 重放）
+
+iphoneclaw 现在支持 **真实用户行为录制** 与 **脚本重放**，可以直接用于 iPhone 自动化流程：
+
+- 在 iPhone 镜像窗口内真实录制：
+  - `python -m iphoneclaw script record-user --app "iPhone Mirroring" --out action_scripts/recorded/my_live_flow.txt`
+- 回放已录制脚本：
+  - `python -m iphoneclaw script run --app "iPhone Mirroring" --file action_scripts/recorded/my_live_flow.txt`
+- 可将高频流程注册到 `action_scripts/registry.json`，让 agent 通过 `run_script(name=...)` 低 token 调用。
+
+典型场景：
+
+- 每日重复操作（打开 App、固定导航、签到、固定点击序列）
+- 活动类交互（例如抢红包一类流程）
+- 绿色应用日常流程（例如蚂蚁森林能量收取一类流程）
+
+说明：
+
+- 脚本越聚焦、越确定性，回放稳定性越高。
+- 自动化操作请遵守目标平台条款与本地法律法规。
 
 ## 设备与系统要求
 
@@ -155,7 +209,7 @@ iphoneclaw windows         枚举可见窗口（调试用）
 iphoneclaw run             运行 agent loop + supervisor API
 iphoneclaw serve           只启动 supervisor API（不跑 worker）
 iphoneclaw ctl             通过 supervisor API 控制/查看 worker
-iphoneclaw script          动作脚本（解析/运行/录制/导出）
+iphoneclaw script          动作脚本（解析/运行/录制/真实录制/导出）
 ```
 
 ## 动作脚本（L1）
@@ -177,12 +231,23 @@ python -m iphoneclaw script run --file action_scripts/common/open_app_spotlight.
 ### 录制或导出脚本
 
 ```bash
-# 从 stdin 录制（Ctrl-D 结束）
+# 真实录制用户行为（鼠标/滚动/热键），仅记录目标窗口内事件
+# Ctrl-C 停止；或用 --seconds N 定时停止
+python -m iphoneclaw script record-user --app "iPhone Mirroring" --out action_scripts/recorded/my_live_flow.txt
+
+# 从 stdin 录制动作文本（Ctrl-D 结束；不是实时鼠标/键盘行为录制）
 python -m iphoneclaw script record --out action_scripts/recorded/my_flow.txt
 
 # 从历史 runs/<id>/events.jsonl 导出可重放脚本
 python -m iphoneclaw script from-run --run-dir runs/<run_id> --out action_scripts/recorded/<run_id>.txt
 ```
+
+`record-user` 事件映射：
+- 左键点击 -> `click(...)`
+- 左键拖拽 -> `drag(...)`
+- 右键点击 -> `right_single(...)`
+- 滚轮 -> `scroll(...)`
+- 热键 -> `hotkey(key='...')`（`cmd 1`/`cmd 2` 会映射成 `iphone_home()`/`iphone_app_switcher()`）
 
 ### 注册脚本（短名）
 

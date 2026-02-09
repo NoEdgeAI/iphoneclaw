@@ -1,6 +1,6 @@
 # Kill current foreground app via App Switcher.
 iphone_app_switcher()
 sleep 1100ms
-drag(start_box='(700,700)', end_box='(700,200)')
+drag(start_box='(900,700)', end_box='(900,200)')
 sleep 350ms
 iphone_home()
