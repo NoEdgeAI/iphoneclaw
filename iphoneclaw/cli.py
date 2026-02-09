@@ -22,6 +22,7 @@ from iphoneclaw.agent.conversation import ConversationStore
 from iphoneclaw.agent.loop import Worker
 
 from iphoneclaw.automation.action_script import ScriptParseError, script_to_predictions
+from iphoneclaw.automation.action_script import expand_special_predictions
 from iphoneclaw.agent.executor import execute_action
 
 
@@ -498,6 +499,15 @@ def cmd_script_run(args: argparse.Namespace) -> int:
         preds = script_to_predictions(src, vars=_parse_vars(args.var), base_dir=os.path.dirname(path))
     except ScriptParseError as e:
         print("script parse error: %s" % str(e))
+        return 2
+    try:
+        preds = expand_special_predictions(
+            preds,
+            registry_path=str(getattr(cfg, "script_registry_path", "./action_scripts/registry.json")),
+            max_expand_depth=8,
+        )
+    except Exception as e:
+        print("script expand error: %s" % str(e))
         return 2
 
     if not preds:

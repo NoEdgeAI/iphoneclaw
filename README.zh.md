@@ -249,6 +249,25 @@ python -m iphoneclaw script from-run --run-dir runs/<run_id> --out action_script
 - 滚轮 -> `scroll(...)`
 - 热键 -> `hotkey(key='...')`（`cmd 1`/`cmd 2` 会映射成 `iphone_home()`/`iphone_app_switcher()`）
 
+### 在脚本里调用另一个脚本（嵌套）
+
+你可以在任意 `.txt` 动作脚本中按“短名”或“路径”调用另一个脚本：
+
+```text
+# 用注册表短名
+include open_app_spotlight APP=bilibili
+
+# 用文件路径
+include action_scripts/common/open_app_spotlight.txt APP=bilibili
+```
+
+等价的显式写法也支持：
+
+```text
+run_script(name='open_app_spotlight', APP='bilibili')
+run_script(path='action_scripts/common/open_app_spotlight.txt', APP='bilibili')
+```
+
 ### 注册脚本（短名）
 
 在 `action_scripts/registry.json` 增加一条映射：

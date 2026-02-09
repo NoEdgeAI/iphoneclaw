@@ -303,6 +303,25 @@ python -m iphoneclaw script from-run --run-dir runs/<run_id> --out action_script
 - wheel scroll -> `scroll(...)`
 - hotkeys -> `hotkey(key='...')` (`cmd 1`/`cmd 2` become `iphone_home()`/`iphone_app_switcher()`)
 
+### Call Another Script From A Script (Nested)
+
+Inside any `.txt` action script, you can include another script by short name or file path:
+
+```text
+# by registry short name
+include open_app_spotlight APP=bilibili
+
+# by path
+include action_scripts/common/open_app_spotlight.txt APP=bilibili
+```
+
+Equivalent explicit form also works:
+
+```text
+run_script(name='open_app_spotlight', APP='bilibili')
+run_script(path='action_scripts/common/open_app_spotlight.txt', APP='bilibili')
+```
+
 ### Register A Script (Short Name)
 
 Add an entry to `action_scripts/registry.json`:

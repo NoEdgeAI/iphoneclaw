@@ -123,6 +123,13 @@ python -m iphoneclaw script from-run --run-dir runs/<run_id> --out action_script
 Action: run_script(name='my_flow')
 ```
 
+You can also compose scripts by nesting inside `.txt`:
+```text
+include open_app_spotlight APP=bilibili
+# or:
+run_script(name='open_app_spotlight', APP='bilibili')
+```
+
 ## Registry Path Resolution
 
 Default registry path is `./action_scripts/registry.json`.

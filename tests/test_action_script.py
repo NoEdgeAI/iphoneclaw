@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import pytest
+
 from iphoneclaw.automation.action_script import script_to_action_calls, script_to_predictions
 from iphoneclaw.automation.action_script import run_script_to_predictions
+from iphoneclaw.automation.action_script import expand_special_predictions
+from iphoneclaw.automation.action_script import ScriptParseError
 
 
 def test_script_parses_compound_example() -> None:
@@ -31,3 +35,39 @@ def test_run_script_expands_from_registry() -> None:
         registry_path="./action_scripts/registry.json",
     )
     assert preds and preds[0].action_type == "iphone_home"
+
+
+def test_script_include_dsl_to_run_script_call() -> None:
+    calls = script_to_action_calls("include open_app_spotlight APP=bilibili")
+    assert len(calls) == 1
+    assert calls[0].startswith("run_script(")
+    assert "name=" in calls[0]
+    assert "open_app_spotlight" in calls[0]
+    assert "APP" in calls[0]
+
+
+def test_script_include_expands_via_registry() -> None:
+    preds = script_to_predictions("include open_app_spotlight APP=bilibili")
+    expanded = expand_special_predictions(
+        preds,
+        registry_path="./action_scripts/registry.json",
+        max_expand_depth=8,
+    )
+    assert expanded
+    assert expanded[0].action_type == "iphone_home"
+    assert any(p.action_type == "type" for p in expanded)
+
+
+def test_circular_include_raises_error(tmp_path) -> None:
+    a = tmp_path / "a.txt"
+    b = tmp_path / "b.txt"
+    a.write_text(f"include {b}\n", encoding="utf-8")
+    b.write_text(f"include {a}\n", encoding="utf-8")
+
+    preds = script_to_predictions(f"run_script(path='{a}')")
+    with pytest.raises(ScriptParseError, match="circular script include detected"):
+        expand_special_predictions(
+            preds,
+            registry_path="./action_scripts/registry.json",
+            max_expand_depth=8,
+        )

@@ -90,10 +90,13 @@ _KNOWN_KEYWORDS = (
     "sleep",
     "wait",
     "swipe",
+    "fswipe",
     "scroll",
     "hotkey",
     "type",
     "open_app",
+    "include",
+    "run_script",
 )
 
 
@@ -210,6 +213,22 @@ def _unescape_type_content(s: str) -> str:
     return s
 
 
+def _parse_vars_tokens(tokens: List[str]) -> Dict[str, str]:
+    out: Dict[str, str] = {}
+    for tok in tokens:
+        t = (tok or "").strip()
+        if not t:
+            continue
+        if "=" not in t:
+            raise ScriptParseError("vars must be KEY=VALUE, got: %r" % t)
+        k, v = t.split("=", 1)
+        k = k.strip()
+        if not k:
+            raise ScriptParseError("vars has empty key: %r" % t)
+        out[k] = v
+    return out
+
+
 @dataclass(frozen=True)
 class ScriptContext:
     base_dir: str
@@ -280,7 +299,7 @@ def _expand_stmt(ctx: ScriptContext, stmt: str) -> List[str]:
         calls = [_parse_sleep_tokens(rest)]
     elif cmd == "wait":
         calls = ["wait()"]
-    elif cmd == "swipe":
+    elif cmd in ("swipe", "fswipe"):
         if not rest:
             raise ScriptParseError("swipe requires a direction: up|down|left|right")
         d = rest[0].lower().strip()
@@ -307,6 +326,32 @@ def _expand_stmt(ctx: ScriptContext, stmt: str) -> List[str]:
     elif cmd == "open_app":
         name = s[len(toks[0]) :].lstrip()
         calls = _macro_open_app(ctx, name)
+    elif cmd in ("include", "run_script"):
+        # DSL include:
+        #   include open_app_spotlight APP=bilibili
+        #   include action_scripts/common/open_app_spotlight.txt APP=bilibili
+        #   run_script open_app_spotlight APP=bilibili
+        if not rest:
+            raise ScriptParseError("%s requires a script name/path" % cmd)
+        target = rest[0].strip()
+        if not target:
+            raise ScriptParseError("%s requires a non-empty script name/path" % cmd)
+        vars_in = _parse_vars_tokens(rest[1:])
+        # Heuristic: if it looks like a path, use path=..., otherwise name=...
+        looks_like_path = (
+            "/" in target
+            or "\\" in target
+            or target.endswith(".txt")
+            or target.startswith(".")
+        )
+        key = "path" if looks_like_path else "name"
+        if vars_in:
+            calls = [
+                "run_script(%s=%s, vars=%s)"
+                % (key, _quote_py_string(target), json.dumps(vars_in, ensure_ascii=False))
+            ]
+        else:
+            calls = ["run_script(%s=%s)" % (key, _quote_py_string(target))]
     else:
         raise ScriptParseError(f"unknown command: {cmd!r}")
 
@@ -330,6 +375,9 @@ def script_to_action_calls(
     - supports both raw action calls (click(...), drag(...), iphone_home()) and DSL keywords
     - supports repetition suffix: "swipe left x 10"
     - supports ${VARNAME} substitution (vars dict + environment variables)
+    - supports nested script include via DSL:
+      - include open_app_spotlight APP=bilibili
+      - include action_scripts/common/open_app_spotlight.txt APP=bilibili
     """
     base_dir = os.path.abspath(base_dir or os.getcwd())
     vars = vars or {}
@@ -463,6 +511,54 @@ def run_script_to_predictions(
     return script_to_predictions(src, vars=vars_in, base_dir=os.path.dirname(script_path))
 
 
+def _expand_prediction_recursive(
+    pred: PredictionParsed,
+    *,
+    registry_path: str,
+    stack: Tuple[str, ...],
+    depth_left: int,
+) -> List[PredictionParsed]:
+    if pred.action_type != "run_script":
+        return [pred]
+
+    if depth_left <= 0:
+        raise ScriptParseError("run_script expansion depth exceeded; possible recursion")
+
+    name, path, vars_in = parse_run_script_call(pred.raw_action)
+    target = path or name
+    if not target:
+        raise ScriptParseError("run_script(...) missing name/path")
+    try:
+        script_path = resolve_script_path(str(target), registry_path=registry_path)
+    except ScriptRegistryError as e:
+        raise ScriptParseError(str(e)) from e
+
+    script_path = os.path.abspath(script_path)
+    if script_path in stack:
+        loop_chain = list(stack) + [script_path]
+        raise ScriptParseError(
+            "circular script include detected: %s"
+            % " -> ".join(os.path.basename(p) for p in loop_chain)
+        )
+
+    with open(script_path, "r", encoding="utf-8") as f:
+        src = f.read()
+    inner = script_to_predictions(src, vars=vars_in, base_dir=os.path.dirname(script_path))
+
+    out: List[PredictionParsed] = []
+    next_stack = stack + (script_path,)
+    for p in inner:
+        out.extend(
+            _expand_prediction_recursive(
+                p,
+                registry_path=registry_path,
+                stack=next_stack,
+                depth_left=depth_left - 1,
+            )
+        )
+    return out
+
+
 def expand_special_predictions(
     preds: Iterable[PredictionParsed],
     *,
@@ -472,18 +568,15 @@ def expand_special_predictions(
     """
     Expand special action types like run_script(...) into concrete actions.
     """
-    cur = list(preds)
-    for _ in range(max(0, int(max_expand_depth))):
-        out: List[PredictionParsed] = []
-        changed = False
-        for p in cur:
-            if p.action_type == "run_script":
-                expanded = run_script_to_predictions(p.raw_action, registry_path=registry_path)
-                out.extend(expanded)
-                changed = True
-            else:
-                out.append(p)
-        cur = out
-        if not changed:
-            break
-    return cur
+    depth = max(0, int(max_expand_depth))
+    out: List[PredictionParsed] = []
+    for p in list(preds):
+        out.extend(
+            _expand_prediction_recursive(
+                p,
+                registry_path=registry_path,
+                stack=tuple(),
+                depth_left=depth,
+            )
+        )
+    return out

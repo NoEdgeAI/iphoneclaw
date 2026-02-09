@@ -84,14 +84,14 @@ def type_text_macos_applescript(
     if content is None:
         content = ""
 
-    trimmed = content.strip()
-    submit_after = (
-        trimmed.endswith("\\n") or trimmed.endswith("\n") or trimmed.endswith("\r\n")
-    )
-
-    strip_once = trimmed[:-2] if trimmed.endswith("\\n") else trimmed.rstrip("\r\n")
-    normalized = strip_once.replace("\\n", "\n")
-    lines: List[str] = normalized.splitlines() if normalized else [""]
+    # Keep original whitespace/newlines; do NOT strip().
+    # We normalize escaped "\\n" and real newline chars into a single '\n' flow,
+    # then emit Return key presses for separators.
+    normalized = (content or "")
+    normalized = normalized.replace("\r\n", "\n")
+    normalized = normalized.replace("\\r\\n", "\n")
+    normalized = normalized.replace("\\n", "\n")
+    parts: List[str] = normalized.split("\n")
 
     aliases = _activate_app_best_effort(app_name)
     proc = _focus_process_best_effort(aliases, mode=mode)
@@ -126,13 +126,9 @@ def type_text_macos_applescript(
                 mode=mode,
             )
 
-    for i, line in enumerate(lines):
-        if line:
-            run_keystroke(line)
-        if i != len(lines) - 1:
+    for i, part in enumerate(parts):
+        if part:
+            run_keystroke(part)
+        if i != len(parts) - 1:
             run_return()
-
-    if submit_after:
-        run_return()
-
-    return submit_after, normalized
+    return ("\n" in normalized), normalized
